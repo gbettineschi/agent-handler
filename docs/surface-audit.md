@@ -18,6 +18,7 @@ Logs are useful supplementary inputs. Do not turn a transcript entry into an act
 
 - **Agent HUD Open**, pinned at `bf19ac98da11fe0f5967f5a124d42f0da4bf2cf9`, supplies the relevant existing-Desktop question and app/browser elicitation reference. Agent Handler adapts these narrow pieces with attribution. [Questions](https://github.com/jazzenchen/agent-hud-open/blob/bf19ac98da11fe0f5967f5a124d42f0da4bf2cf9/Sources/AgentHUDCore/Providers/Codex/CodexDesktopQuestions.swift), [permissions](https://github.com/jazzenchen/agent-hud-open/blob/bf19ac98da11fe0f5967f5a124d42f0da4bf2cf9/Sources/AgentHUDCore/Providers/Codex/CodexDesktopPermissions.swift).
 - **OpenIsland**, inspected at `01aa0924fd96bf319a64e75646765c55cae4e2c5`, has a genuine blocking Claude-family hook/socket path. Its Claude answer maps to native `updatedInput`. The audited implementation keys pending responses by session, clears UI before confirmed delivery and does not retain unknown delivery durably. These are engineering defects to avoid, not evidence that hooks cannot work. Its Desktop Code-mode support does not establish general Claude Chat/Cowork coverage. [Bridge](https://github.com/Octane0411/open-vibe-island/blob/01aa0924fd96bf319a64e75646765c55cae4e2c5/Sources/OpenIslandCore/BridgeServer.swift), [hook entry point](https://github.com/Octane0411/open-vibe-island/blob/01aa0924fd96bf319a64e75646765c55cae4e2c5/Sources/OpenIslandHooks/OpenIslandHooksCLI.swift).
+- **CodeIsland**, inspected at `31cf9b57ba8f8f9926a2c353184069e7c27f51be`, reads Claude's local agent-session audit files for Cowork and compatible local Chat observation. It leaves those approvals in Claude. Its reducer can clear pending requests on main-assistant output or on an unmatched permission response; our observer instead removes only an exactly matching permission ID or an explicit terminal result. Its silence cleanup is presentation policy, not evidence of successful completion. [Audit parser/reducer](https://github.com/wxtsky/CodeIsland/blob/31cf9b57ba8f8f9926a2c353184069e7c27f51be/Sources/CodeIslandCore/CoworkAuditLog.swift), [watcher integration](https://github.com/wxtsky/CodeIsland/blob/31cf9b57ba8f8f9926a2c353184069e7c27f51be/Sources/CodeIsland/AppState%2BCoworkWatch.swift). No CodeIsland source code was copied into Agent Handler.
 
 ## Codex / ChatGPT Work Desktop
 
@@ -46,6 +47,8 @@ The later Clock test did pass a native app approval: the user confirmed allowing
 ## Regular ChatGPT Chat
 
 The user's revised scope is **activity and completion tracking only** for regular Chat; interactive questions and approvals remain Work capabilities in our implementation scope. The earlier question audit below is historical protocol evidence, not an outstanding request for another Chat question test.
+
+In the follow-up the user asked whether competitors simply read logs and suggested deferring regular Chat. The current implementation proceeds on that basis, keeping ordinary ChatGPT Chat out of advertised coverage.
 
 The installed renderer handles a Chat `conversation-turn-complete` pubsub event and separate streaming/async state. The official [notification documentation](https://learn.chatgpt.com/docs/notifications) describes completion alerts and the Activity view, but does not establish an external event subscription for companions. The same host's Work `turn-completed` event is not interchangeable with this Chat event.
 
@@ -85,8 +88,14 @@ A fresh Cowork test requested only a labeled file in the repository's temporary 
 
 ## Next acceptance gates
 
+### Native Claude audit increment
+
+Read-only inspection found nine native local-session metadata/audit pairs on this Mac, latest modified in June. Actual records confirmed `system/init` UUIDs, SDK session IDs, root result/error fields and native permission UUIDs. Only schema/aggregate metadata was inspected; personal transcripts and credentials were not copied into the repository. The new original observer uses fabricated fixtures of these shapes, opens files read-only without following parent/file symlinks and baselines existing files at EOF. Malformed/gapped/oversize data cannot supply completion; child results and unrelated permission responses cannot clear the main state. It has no response transport.
+
+The current Code CLI's supported `auth status` command reported signed out. Claude Desktop still showed Free. A read-only observer probe found no new activity; historical audits did not reappear. Fresh native local observation is pending an available runtime. Current cloud Cowork execution may not produce the same local audit store, so paid access alone is not a passing integration test. Source visibility and a fresh init/result sequence must be verified.
+
 1. A confirmed user-reviewed Codex turn: native command Allow once, source result, card withdrawal, then browser/app confirmations separately.
 2. A fresh completed-turn question: exact native reply receipt and sibling retention, without resending an old request.
-3. Claude: prove which session types load hooks, callback identity/lifetime, cancellation behavior, return path and correlated acceptance before implementing a general hook adapter.
-4. Regular Chat: establish a source for activity/completion only, with conversation/turn identity and defined reconnect/replay behavior. A native interactive-question test is no longer required for this scope.
+3. Claude: verify a fresh local audit init/result/wait sequence and separately establish live response ownership, callback lifetime/cancellation and acceptance before implementing response delivery.
+4. Regular Chat is deferred. Revisit only with a usable lifecycle source or an explicitly selected alternative surface.
 5. Real host reconnect, sleep/wake and uncertain-send restart, plus remaining display/keyboard checks in [verification.md](verification.md).

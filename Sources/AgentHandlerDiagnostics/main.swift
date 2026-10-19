@@ -1,13 +1,31 @@
 import Foundation
 import AgentHandlerCore
 import CodexDesktopAdapter
+import ClaudeDesktopAdapter
+import AppKit
 
 @main struct Diagnostics {
     static func main() async throws {
         let arguments = CommandLine.arguments
-        guard arguments.contains("--probe") || arguments.contains("--demo") else {
-            print("agent-handler-diagnostics --demo | --probe [--thread ID]")
+        guard arguments.contains("--probe") || arguments.contains("--demo") || arguments.contains("--claude-probe") else {
+            print("agent-handler-diagnostics --demo | --probe [--thread ID] | --claude-probe")
             return
+        }
+        if arguments.contains("--claude-probe") {
+            let observer = ClaudeDesktopObserver()
+            for _ in 0..<3 {
+                let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.anthropic.claudefordesktop").first
+                let source = app.map { "\($0.processIdentifier):\($0.launchDate?.timeIntervalSince1970 ?? 0)" }
+                await observer.poll(sourceInstance: source)
+                try await Task.sleep(for: .seconds(1))
+            }
+            let views = await observer.activity()
+            let output: [String: Any] = ["mode": "read-only", "surface": "Claude local runtime audits",
+                "activityCounts": Dictionary(grouping: views, by: { $0.status.rawValue }).mapValues(\.count),
+                "status": await observer.health(), "responseTransport": false,
+                "limitation": "Existing files are baselined. Cloud-only chats without local audits are not covered."]
+            print(String(decoding: try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self))
+            await observer.stop(); return
         }
         let core = RequestController(ledger: MemoryLedger())
         if arguments.contains("--demo") {

@@ -108,6 +108,14 @@ The activity branch remains local: `git ls-remote origin HEAD` failed because th
 
 ## Independent review
 
+### Follow-up with unrestricted local access
+
+The complete pre-Claude suite passed **76 test functions across 14 suites**, including the previously blocked native-activity socket fixture. A current read-only Work probe reported one compatible version-11 owner stream, zero pending requests and one running turn. Network access to the private repository was also restored (`git ls-remote` succeeded).
+
+The new Claude reducer and observer passed **92 test functions across 16 suites** in the complete suite. Tests include native phase/permission semantics, strict boolean flags, child/mismatched results, duplicate IDs, untrusted message content, incremental/partial/oversized records, EOF baseline, newly discovered old files, account separation, rotation/truncation/rewrite, symlink refusal, archives, source restart and presentation capacity. All fixtures are fabricated, with no copied personal chat content.
+
+The read-only `--claude-probe` returned empty activity counts and `responseTransport: false`, correctly avoiding all historical local audits. The current CLI reports signed out and Desktop shows Free. This is a passing no-replay/probe check, not a live Claude turn, question or approval round trip. Cloud-only sessions without a local audit remain unsupported. The audit stream is an observation source; it does not prove per-runtime heartbeat liveness or exact answer acceptance.
+
 One fresh-context reviewer inspected the whole implementation and reproduced three Important defects with independent synthetic harnesses. All three were reproduced by failing repository tests and then fixed:
 
 | Finding | Regression |

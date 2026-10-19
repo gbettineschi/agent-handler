@@ -3,10 +3,12 @@ import SwiftUI
 import ServiceManagement
 import AgentHandlerCore
 import CodexDesktopAdapter
+import ClaudeDesktopAdapter
 
 @MainActor final class AppModel: ObservableObject {
     @Published var requests: [RequestView] = []
     @Published var activities: [ActivityView] = []
+    @Published var claudeActivities: [ActivityView] = []
     @Published var titles: [String: String] = [:]
     @Published var health = "Starting…"
     @Published var issue: String?
@@ -18,10 +20,12 @@ import CodexDesktopAdapter
     let demo: Bool
     let core: RequestController
     private let adapter: DesktopAdapter
+    private let claude = ClaudeDesktopObserver()
     private let directory: URL
     private let instanceLock: InstanceLock
     private var watching: Task<Void, Never>?
     private var refreshing: Task<Void, Never>?
+    private var observingClaude: Task<Void, Never>?
     private var tokens: [NSObjectProtocol] = []
     private var sleeping = false
     private var lastDiscovery: TimeInterval = 0
@@ -66,9 +70,26 @@ import CodexDesktopAdapter
                 try? await Task.sleep(for: .seconds(5))
             }
         }
+        observingClaude = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                if enabled, !sleeping {
+                    let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.anthropic.claudefordesktop").first
+                    let source = app.map { "\($0.processIdentifier):\($0.launchDate?.timeIntervalSince1970 ?? 0)" }
+                    await claude.poll(sourceInstance: source)
+                    claudeActivities = await claude.activity()
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
         let center = NSWorkspace.shared.notificationCenter
         tokens.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in guard let self else { return }; self.sleeping = true; await self.adapter.stop(); self.activities = await self.adapter.activity(); self.health = "Paused during sleep" }
+            Task { @MainActor in
+                guard let self else { return }; self.sleeping = true
+                await self.adapter.stop(); await self.claude.stop()
+                self.activities = await self.adapter.activity(); self.claudeActivities = await self.claude.activity()
+                self.health = "Paused during sleep"
+            }
         })
         tokens.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in guard let self else { return }; self.sleeping = false; self.lastDiscovery = 0; await self.refreshDiscovery() }
@@ -77,7 +98,8 @@ import CodexDesktopAdapter
 
     private func reconfigure() async {
         guard !demo else { return }
-        await adapter.stop(); activities = await adapter.activity(); lastDiscovery = 0
+        await adapter.stop(); await claude.stop()
+        activities = await adapter.activity(); claudeActivities = await claude.activity(); lastDiscovery = 0
         await refreshDiscovery()
     }
     private func refreshDiscovery() async {
@@ -110,7 +132,7 @@ import CodexDesktopAdapter
         }
         let state = await adapter.health()
         activities = await adapter.activity()
-        health = [discoveryWarning, state.message].compactMap { $0 }.joined(separator: "\n")
+        health = [discoveryWarning, state.message, await claude.health()].compactMap { $0 }.joined(separator: "\n")
         if await core.persistenceFailed { issue = "Responses disabled: delivery tracking is unavailable. Use the source app." }
     }
 
