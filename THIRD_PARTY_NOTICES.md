@@ -4,6 +4,6 @@ Parts of `Sources/CodexDesktopAdapter` and its synthetic socket test server are 
 
 Origin files: `JSONValue.swift`, `RecordCoding.swift`, `CodexDesktopIPC.swift`, `CodexDesktopPatches.swift`, `CodexDesktopQuestions.swift`, `CodexDesktopStream.swift` and `CodexDesktopTestServer.swift`.
 
-Changes include module/type names, a different request controller and delivery ledger, stricter shape and capacity validation, socket peer checking, connection and recovery limits, and product-specific question response handling. No upstream quota, account or agent-launching modules are included.
+Changes include module/type names, a different request controller and delivery ledger, stricter shape and capacity validation, question-focused state projection and discarded-branch patch handling, socket peer checking, connection and recovery limits, and product-specific question response handling. No upstream quota, account or agent-launching modules are included.
 
 The remaining original Agent Handler code is private project code. This notice does not grant a license to that original code. Third-party portions retain their own license.

@@ -37,7 +37,7 @@
 
 - `Sources/AgentHandlerCore/{Request,RequestStore,RequestController,DeliveryLedger,SQLiteLedger}.swift`: domain, pure transitions, actor and persistence.
 - `Sources/CSQLite/{module.modulemap,shim.h}`: system SQLite module.
-- `Sources/CodexDesktopAdapter/{JSONValue,RecordCoding,DesktopIPC,DesktopPatches,DesktopQuestions,DesktopStream,DesktopAdapter,ThreadDiscovery}.swift`: bounded native protocol, question contract and discovery.
+- `Sources/CodexDesktopAdapter/{JSONValue,RecordCoding,DesktopIPC,DesktopPatches,DesktopProjection,DesktopQuestions,DesktopStream,DesktopAdapter,ThreadDiscovery}.swift`: bounded native protocol, question projection, question contract and discovery.
 - `Sources/AgentHandlerApp/{AppMain,AppModel,NotchPanel,RequestView}.swift`: native app composition and UI.
 - `Sources/AgentHandlerDiagnostics/main.swift`: fixture demo and read-only probe.
 - `Tests/AgentHandlerCoreTests/`: lifecycle, concurrency, persistence and restart tests.
@@ -99,7 +99,7 @@
 - [x] Implement read-only discovery with change coalescing and periodic bounded reconciliation, preserving explicitly selected conversations and pending requests. Wire sleep/wake invalidation.
 - [x] Add notch attention count, expandable queue, question text/choices/free text, explicit Send and Open in source. Keep sending/unknown/uncertain visible. Include clearly labeled demo mode, display selection, adapter toggle and launch-at-login setting.
 - [x] Run `scripts/test.sh` and `scripts/bundle.sh`; expected passing tests and a runnable development `.app` under ignored `dist/`.
-- [ ] Inspect demo UI in the running app, including keyboard entry and multiple simultaneous questions; verify only the selected fixture request settles.
+- [x] Inspect demo UI in the running app, including keyboard entry and multiple simultaneous questions; verify only the selected fixture request settles.
 - [x] Commit `feat: add minimal notch companion and source navigation`.
 
 ## Task 5: Compatibility evidence, review and private delivery
@@ -118,4 +118,4 @@ The user approved this design and explicitly waived further planning approval pa
 
 ## Verification qualifications
 
-Core, persistence, adapter and app implementation steps are complete. The separate-UID peer rejection path is implemented but was not exercised with a foreign-UID process. Visual/keyboard checks and live user-clicked responses remain pending because the Mac was locked; these are not claimed as passed. Native read-only discovery and pending-question parsing succeeded. Detailed evidence is in `docs/verification.md` and `docs/compatibility.md`.
+Core, persistence, adapter and app implementation steps are complete. After unlocking, the user explicitly delegated harmless native test answers to computer use. Demo text entry, option selection, queue behavior and collapse/reopen passed. Two simultaneous native questions, option/free-text reply delivery and whole-app restart with a pending question also passed. Long-history retention was corrected with failing-then-passing regressions and an independent review. Direct source-app clicks, real sleep/wake, multiple displays, full keyboard navigation and native uncertain-send restart remain pending. The separate-UID peer rejection path is implemented but was not exercised with a foreign-UID process. Detailed evidence is in `docs/verification.md` and `docs/compatibility.md`.

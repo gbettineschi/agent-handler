@@ -4,14 +4,14 @@ This is a development milestone, not universal agent interception.
 
 | Surface | Implemented | Evidence on 2026-10-19 |
 | --- | --- | --- |
-| Existing Codex/ChatGPT Desktop async questions | Native observation, free text and single-choice responses | Live owner stream and one real pending question detected; synthetic native receipt round trip passes. User-clicked native answer acceptance still pending. |
-| Answering in the source app | Reply envelopes withdraw matching requests | Parser and socket-fixture tests; live acceptance pending. |
-| Multiple questions and conversations | Independent request identity and scoped state | Core and synthetic socket tests. |
+| Existing Codex/ChatGPT Desktop async questions | Native observation, free text and single-choice responses | Both option and typed answers submitted through the app UI arrived in the native conversation. Harmless test clicks were explicitly delegated to computer use. |
+| Answering in the source app | Reply envelopes withdraw matching requests | Parser/socket tests and fresh native observers verify reply removal. Direct source-app UI clicks remain untested because that app is blocked by the computer tool. |
+| Multiple questions and conversations | Independent request identity and scoped state | Two simultaneous native questions tested; answering one retained the other. Multiple conversations remain core/socket-fixture tested. |
 | Core approval model | Exact native choice IDs; no generic allow-all | Core tests only; no live approval adapter. |
 | Command, browser, app and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
-| Notch and menu fallback | Native AppKit/SwiftUI interface | Geometry tests and app launch pass. Visual/keyboard verification blocked by the locked Mac. |
-| Restart and uncertain delivery | Durable ledger and generation fencing | SQLite reopen, concurrency and SIGKILL subprocess checks at three committed ledger checkpoints. Whole-app native restart and sleep/wake acceptance pending. |
+| Notch and menu fallback | Native AppKit/SwiftUI interface | Panel, text entry, option selection, request selector and collapse/reopen tested through computer use. Menu fallback, multiple displays and full keyboard navigation remain pending. |
+| Restart and uncertain delivery | Durable ledger and generation fencing | Whole-app restart retained a native pending question. SQLite reopen, concurrency and SIGKILL checks pass at three committed ledger checkpoints. Native uncertain-send restart and real sleep/wake remain pending. |
 
 ## Tested host
 
@@ -36,6 +36,7 @@ Only stream version 11 and recognized complete question shapes become actionable
 - At most 16 followed conversations and 128 unresolved requests.
 - Frames at most 128 MiB; supported content fields at most 16 KiB.
 - Conservative retained-tree accounting: 8 MiB per conversation, 64 MiB across the followed set, depth under 128. These are projection budgets, not exact RSS limits; receive buffers, parser temporaries and copy-on-write versions add transient memory.
+- Unused item fields are discarded before retained-budget admission. Identity, question content and accepted-answer envelopes stay intact; markers preserve paths for later native updates. Required oversized content is still unsupported.
 - Candidate file metadata is checked every five seconds; SQL runs when metadata changes or at least every sixty seconds. No periodic full transcript scan.
 - Ten-second connection/answer deadline, thirty-second frame deadline and capped recovery/reconnect cadence.
 
