@@ -41,6 +41,8 @@ Agent Handler had a separate compatibility defect: it only accepted string appro
 
 The current sandbox denied direct socket probes and socket fixture setup. The 46 socket-free tests passed, including the new parser regression; the complete 62-test invocation had 22 socket-related case issues. The release bundle and signature passed. These are partial verification results, not a replacement for the full suite or a live approval round trip. Calculator access and a public example-page navigation produced no observed approval card; neither counts as native approval acceptance.
 
+The later Clock test did pass a native app approval: the user confirmed allowing it through Agent Handler, the waiting computer tool returned Clock's interface, the panel cleared and a new durable ledger entry closed. This establishes app-approval response delivery and host continuation under the granular preset. It does not cover shell prompts, browser-origin prompts, every persistence scope, or an exact accepted receipt.
+
 ## Regular ChatGPT Chat
 
 The installed renderer includes Chat-style question widgets carrying `codex_request_user_input` metadata and a tool-role `codex_request_user_input_response` continuation with response-acceptance checks. That path differs from the Work owner's steer/start envelope. Its conversation fetching and live updates belong to authenticated host services; no supported external companion attachment was established in this audit.

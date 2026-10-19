@@ -90,6 +90,8 @@ The complete local invocation ran 62 tests and reported 22 socket-related case i
 
 The user restarted the updated bundle. A Calculator access check and a public example-page navigation completed without an observed approval card; Agent Handler had no approval to answer. They are **not** passing approval tests. The page was closed. No approval policy was changed, unknown sends retried, or production ledger entries deleted.
 
+A subsequent fresh Clock access request **passed the real app-approval flow**. The user explicitly confirmed “I allowed the clock from agent handler.” The waiting `cua.getApp("Clock")` call then returned Clock's native interface. Agent Handler showed “No requests to show”; a read-only ledger check showed a new `closed` entry at 21:07:51 UTC. Card display and selection are user-confirmed; native tool completion, empty panel and durable closure were independently observed. The exact persistence choice and accepted receipt were not captured, so this does not verify a particular Allow scope or prove execution from a dispatch acknowledgment alone. Shell and browser-origin approvals remain separate pending checks.
+
 Claude's native Chat test accepted Blue in the source UI, but the installed event-only probe produced no local callback file. The Cowork attempt produced neither the requested temporary file nor a native question; the account UI showed Free plan, which does not meet Anthropic's documented paid-plan requirement. This is an unavailable test environment, not a failed or verified Cowork adapter. The probe was disabled through the Plugins UI and its switch was verified off. Its uploaded copy is retained, inactive. No paid upgrade or permission change was made.
 
 ## Independent review
