@@ -106,11 +106,11 @@
 
 **Interfaces:** diagnostic commands and the packaged app use the exact production modules.
 
-- [ ] Add macOS CI and concise setup, compatibility, provenance and verification documentation. Clearly distinguish core approval tests from live approval support.
-- [ ] Run the entire test suite and release build. Run a read-only host compatibility probe; record host build, stream version, discovery result and parser outcome without storing private conversation contents.
-- [ ] Run a synthetic end-to-end answer scenario and measure bounded idle process behavior. Real user answers and sleep/wake acceptance remain explicitly pending until performed by the user; never label synthetic evidence as native acceptance.
-- [ ] Obtain an independent whole-branch review under the requesting-code-review skill. Fix material findings with failing-then-passing regression tests; rerun the full suite.
-- [ ] Commit verified source and docs, fast-forward the new repository's main branch, push to the authorized private remote and verify visibility plus commit SHA. Report the app location and any live acceptance still required.
+- [x] Add macOS CI and concise setup, compatibility, provenance and verification documentation. Clearly distinguish core approval tests from live approval support.
+- [x] Run the entire test suite and release build. Run a read-only host compatibility probe; record host build, stream version, discovery result and parser outcome without storing private conversation contents.
+- [x] Run a synthetic end-to-end answer scenario and measure bounded idle process behavior. Real user answers and sleep/wake acceptance remain explicitly pending until performed by the user; never label synthetic evidence as native acceptance.
+- [x] Obtain an independent whole-branch review under the requesting-code-review skill. Fix material findings with failing-then-passing regression tests; rerun the full suite.
+- [x] Commit verified source and docs, fast-forward the new repository's main branch, push to the authorized private remote and verify visibility plus commit SHA. Report the app location and any live acceptance still required.
 
 ## Execution decisions
 
