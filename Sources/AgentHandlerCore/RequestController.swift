@@ -20,7 +20,9 @@ public actor RequestController {
                 case .closed: state = entry.fingerprint == request.fingerprint ? .closed : .uncertain
                 case .inFlight: state = store.records[request.key]?.view.state == .sending ? .sending : .uncertain
                 case .uncertain: state = .uncertain
-                case .notSent, .rejected: state = nil
+                case .notSent, .rejected:
+                    state = nil
+                    restoreUnsentRequest(key: request.key, entry: entry)
                 }
                 if let state { store.records[request.key]?.view.state = state }
             }
@@ -43,6 +45,13 @@ public actor RequestController {
     private func disableResponses() {
         persistenceFailed = true
         for key in store.records.keys where store.records[key]?.view.state == .pending { store.records[key]?.view.state = .unavailable }
+    }
+    private func restoreUnsentRequest(key: RequestKey, entry: LedgerEntry) {
+        guard !persistenceFailed, [.notSent, .rejected].contains(entry.status), store.isFresh(key),
+              store.records[key]?.view.state == .uncertain else { return }
+        // A fresh owner still advertises this request, and the ledger proves no delivery.
+        // Enable a new explicit choice; never resend the previous answer automatically.
+        store.records[key]?.view.state = .pending
     }
     public func respond(key: RequestKey, fingerprint: String, answer: UserAnswer, using transport: any ResponseTransport) async throws {
         guard !persistenceFailed else { throw ResponseError.persistenceUnavailable }
@@ -71,6 +80,15 @@ public actor RequestController {
                 store.records[key]?.view.state = .rejected
                 store.invalidate(scope: key.scope, epoch: attempt.epoch)
             }
+        }
+        // Reconnection can deliver its fresh snapshot before this old preflight finishes.
+        // Only a persisted definite non-delivery may unlock that fresh replacement.
+        if [.notSent, .rejected].contains(actual), store.isFresh(key), store.records[key]?.view.state == .uncertain {
+            do {
+                if let entry = try ledger.status(for: key), entry.attemptID == attempt.id {
+                    restoreUnsentRequest(key: key, entry: entry)
+                }
+            } catch { disableResponses() }
         }
         publish()
     }

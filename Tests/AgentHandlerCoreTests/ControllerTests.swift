@@ -23,6 +23,61 @@ struct ImmediateTransport: ResponseTransport {
 }
 
 struct ControllerTests {
+    @Test func aLateNonDeliveryCannotUndoADurableClosure() async throws {
+        let database = try temporaryDatabase()
+        defer { try? FileManager.default.removeItem(at: database.deletingLastPathComponent()) }
+        let ledger = try SQLiteLedger(url: database), core = RequestController(ledger: ledger), wire = GateTransport()
+        let original = question(), replacement = question(title: "Reused identity")
+        let epoch = await core.begin(scope: scope)
+        await core.observe(observation([original], epoch: epoch))
+        let sending = Task {
+            try await core.respond(key: original.key, fingerprint: original.fingerprint, answer: .text("Old answer"), using: wire)
+        }
+        try await wire.waitForStart()
+        await core.observe(observation([], epoch: epoch, revision: 2))
+        await wire.finish(.notSent)
+        try await sending.value
+        #expect(try ledger.status(for: original.key)?.status == .closed)
+        #expect(await core.snapshot().first?.state == .closed)
+        let recoveredEpoch = await core.begin(scope: scope)
+        await core.observe(observation([replacement], epoch: recoveredEpoch))
+        #expect(await core.snapshot().first?.state == .uncertain)
+        await #expect(throws: ResponseError.self) {
+            try await core.respond(key: replacement.key, fingerprint: replacement.fingerprint, answer: .text("New answer"), using: wire)
+        }
+        #expect(await wire.count == 1)
+    }
+
+    @Test(arguments: [false, true], [DeliveryOutcome.notSent, .rejected, .uncertain])
+    func reconnectRecoversDefiniteNonDeliveryOnlyAfterFreshState(recoveryBeforeReceipt: Bool, outcome: DeliveryOutcome) async throws {
+        let ledger = MemoryLedger(), core = RequestController(ledger: ledger), wire = GateTransport()
+        let original = question(), replacement = question(title: "Fresh replacement")
+        let epoch = await core.begin(scope: scope)
+        await core.observe(observation([original], epoch: epoch))
+        let sending = Task {
+            try await core.respond(key: original.key, fingerprint: original.fingerprint, answer: .text("Old answer"), using: wire)
+        }
+        try await wire.waitForStart()
+        let recoveredEpoch = await core.begin(scope: scope)
+        if recoveryBeforeReceipt { await core.observe(observation([replacement], epoch: recoveredEpoch)) }
+        await wire.finish(outcome)
+        try await sending.value
+        if !recoveryBeforeReceipt {
+            #expect(await core.snapshot().first?.state == .uncertain)
+            await core.observe(observation([replacement], epoch: recoveredEpoch))
+        }
+        #expect(await core.snapshot().first?.state == (outcome == .uncertain ? .uncertain : .pending))
+        #expect(await wire.count == 1) // Recovery never sends automatically.
+        await #expect(throws: ResponseError.self) {
+            try await core.respond(key: original.key, fingerprint: original.fingerprint, answer: .text("Old answer"), using: wire)
+        }
+        if outcome != .uncertain {
+            try await core.respond(key: replacement.key, fingerprint: replacement.fingerprint,
+                answer: .text("Explicit fresh answer"), using: ImmediateTransport(outcome: .accepted))
+            #expect(await core.snapshot().first?.state == .accepted)
+        }
+    }
+
     @Test func acceptedReceiptSettlesTemporarilyUnavailableRequest() async throws {
         let ledger = MemoryLedger(), wire = GateTransport(), q = question()
         let core = RequestController(ledger: ledger)

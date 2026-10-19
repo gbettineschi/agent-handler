@@ -64,6 +64,11 @@ final class FixtureDesktopServer: @unchecked Sendable {
         }.count }
     }
 
+    /// Disconnect only fixture followers; keep the listener available for a real reconnect.
+    func disconnectFollowers() {
+        lock.withLock { for peer in followers.keys { Darwin.shutdown(peer, SHUT_RDWR) } }
+    }
+
     func emitSnapshot(_ state: JSONValue, thread: String, revision: Int64) {
         let targets = lock.withLock { followers.filter { $0.value.contains(thread) }.map(\.key) }
         for peer in targets {
