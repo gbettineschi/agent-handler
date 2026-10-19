@@ -23,6 +23,14 @@ struct ImmediateTransport: ResponseTransport {
 }
 
 struct ControllerTests {
+    @Test func persistenceFailureKeepsFutureQuestionsDisabled() async throws {
+        let ledger = FailsFirstStatusLedger(), core = RequestController(ledger: ledger)
+        let epoch = await core.begin(scope: scope), q = question()
+        await core.observe(observation([q], epoch: epoch))
+        #expect(await core.persistenceFailed)
+        await core.observe(observation([q], epoch: epoch, revision: 2))
+        #expect(await core.snapshot().first?.state == .unavailable)
+    }
     @Test func newEpochFencesOutstandingReceipt() async throws {
         let core = RequestController(ledger: MemoryLedger()), wire = GateTransport(), q = question()
         let epoch = await core.begin(scope: scope)
@@ -101,4 +109,16 @@ struct ControllerTests {
         try await core.respond(key: request.key, fingerprint: request.fingerprint, answer: .decision("once"), using: ImmediateTransport(outcome: .accepted))
         #expect(await core.snapshot().first?.state == .accepted)
     }
+}
+
+private final class FailsFirstStatusLedger: DeliveryLedger, @unchecked Sendable {
+    private let lock = NSLock()
+    private var first = true
+    struct Failed: Error {}
+    func status(for key: RequestKey) throws -> LedgerEntry? {
+        try lock.withLock { if first { first = false; throw Failed() }; return nil }
+    }
+    func reserve(key: RequestKey, fingerprint: String, attemptID: UUID) throws {}
+    func finish(key: RequestKey, attemptID: UUID, outcome: DeliveryOutcome) throws {}
+    func close(key: RequestKey) throws {}
 }

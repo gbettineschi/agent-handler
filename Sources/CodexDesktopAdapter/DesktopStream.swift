@@ -141,6 +141,7 @@ public final class DesktopStream: @unchecked Sendable {
         var owner: String
         var state: JSONValue?
         var revision: Int64 = 0
+        var retainedCost = 0
         /// When the whole state was last asked for, on the system's uptime.
         var asked: TimeInterval
     }
@@ -189,6 +190,10 @@ public final class DesktopStream: @unchecked Sendable {
             guard let entry = followed.removeValue(forKey: thread) else { return }
             try? connection.follow(false, source: clientID, owner: entry.owner, threadID: thread)
             dirty = true
+        }
+        func retainedCost(_ state: JSONValue, replacing thread: String) -> Int? {
+            let others = followed.reduce(0) { $0 + ($1.key == thread ? 0 : $1.value.retainedCost) }
+            return ProjectionBudget.cost(state, available: ProjectionBudget.total - others)
         }
         defer { for thread in Array(followed.keys) { unfollow(thread) } }
 
@@ -254,10 +259,11 @@ public final class DesktopStream: @unchecked Sendable {
                             guard change["conversationState"].objectValue != nil, case .integer(let revision) = change["revision"] else {
                                 throw DesktopIPC.Failure.protocolError
                             }
-                            guard Self.fitsBudget(change["conversationState"]) else {
+                            guard let cost = retainedCost(change["conversationState"], replacing: thread) else {
                                 unfollow(thread); foreign.insert(thread); break
                             }
                             entry.state = change["conversationState"]
+                            entry.retainedCost = cost
                             entry.revision = revision
                             followed[thread] = entry
                             dirty = true
@@ -285,9 +291,13 @@ public final class DesktopStream: @unchecked Sendable {
                                 }
                                 dirty = true
                             }
-                            if let current = entry.state, !Self.fitsBudget(current) {
-                                unfollow(thread); foreign.insert(thread); dirty = true
-                            } else { followed[thread] = entry }
+                            if let current = entry.state {
+                                guard let cost = retainedCost(current, replacing: thread) else {
+                                    unfollow(thread); foreign.insert(thread); dirty = true; break
+                                }
+                                entry.retainedCost = cost
+                            } else { entry.retainedCost = 0 }
+                            followed[thread] = entry
                         default:
                             unfollow(thread); foreign.insert(thread); dirty = true
                         }
@@ -316,22 +326,12 @@ public final class DesktopStream: @unchecked Sendable {
 
     /// A connection that has been replaced, or stopped, no longer says what is known. A stream that came to rest says
     /// that nothing is, unless it was started again meanwhile.
-    private static func fitsBudget(_ state: JSONValue) -> Bool {
-        guard let data = try? RecordCoding.encoder().encode(state) else { return false }
-        return data.count <= 8 * 1024 * 1024
-    }
-
     private func publish(_ incoming: [String: Thread], run: Int? = nil, unlessRunning: Bool = false) {
-        var threads: [String: Thread] = [:], budget = 64 * 1024 * 1024
-        for id in incoming.keys.sorted() {
-            guard let entry = incoming[id], let bytes = try? RecordCoding.encoder().encode(entry.state), bytes.count <= budget else { continue }
-            threads[id] = entry; budget -= bytes.count
-        }
         let waiting = lock.withLock { () -> [AsyncStream<Void>.Continuation] in
             if let run, !(running && generation == run) { return [] }
             if unlessRunning, running { return [] }
-            guard !(published.isEmpty && threads.isEmpty) else { return [] }
-            published = threads
+            guard !(published.isEmpty && incoming.isEmpty) else { return [] }
+            published = incoming
             return Array(listeners.values)
         }
         for listener in waiting { listener.yield() }

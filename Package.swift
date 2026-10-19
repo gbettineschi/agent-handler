@@ -9,7 +9,10 @@ let package = Package(
         .systemLibrary(name: "CSQLite"),
         .target(name: "AgentHandlerCore", dependencies: ["CSQLite"]),
         .target(name: "CodexDesktopAdapter", dependencies: ["AgentHandlerCore", "CSQLite"]),
+        .executableTarget(name: "AgentHandlerApp", dependencies: ["AgentHandlerCore", "CodexDesktopAdapter"]),
+        .executableTarget(name: "AgentHandlerDiagnostics", dependencies: ["AgentHandlerCore", "CodexDesktopAdapter"]),
         .testTarget(name: "AgentHandlerCoreTests", dependencies: ["AgentHandlerCore", "CSQLite"]),
-        .testTarget(name: "CodexDesktopAdapterTests", dependencies: ["CodexDesktopAdapter", "AgentHandlerCore"])
+        .testTarget(name: "CodexDesktopAdapterTests", dependencies: ["CodexDesktopAdapter", "AgentHandlerCore", "CSQLite"]),
+        .testTarget(name: "AgentHandlerAppTests", dependencies: ["AgentHandlerApp"])
     ], swiftLanguageModes: [.v6]
 )

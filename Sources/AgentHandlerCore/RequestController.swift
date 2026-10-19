@@ -25,6 +25,7 @@ public actor RequestController {
                 if let state { store.records[request.key]?.view.state = state }
             }
         } catch { disableResponses() }
+        if persistenceFailed { disableResponses() }
         publish()
     }
     public func invalidate(scope: RequestScope, epoch: UUID) { store.invalidate(scope: scope, epoch: epoch); publish() }
