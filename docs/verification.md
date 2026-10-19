@@ -2,7 +2,7 @@
 
 ## Automated checks
 
-On 2026-10-19, **51 tests across 11 suites passed locally** using `scripts/test.sh`. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
+On 2026-10-19, **51 tests across 11 suites passed locally and in macOS CI** using `scripts/test.sh`. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
 
 Coverage includes independent IDs, integer/string distinction, duplicate submissions, changed content, stale generations/revisions, scoped withdrawal, durable reservations, restart uncertainty, lost/mismatched receipts, owner changes, pre-send cancellation, revision gaps, frame fragmentation/limits, unknown stream versions, metadata discovery and panel geometry. Storage failure and Desktop's unset metadata flag were reproduced as failing regressions before fixing them.
 
@@ -11,6 +11,8 @@ Coverage includes independent IDs, integer/string distinction, duplicate submiss
 `ProcessCrashTests` launches a separate test-only executable against temporary ledgers and terminates it with SIGKILL, without running SQLite close or object cleanup. Three checkpoints pass: a committed reservation reopens as uncertain and blocks another attempt, committed acceptance stays accepted, and a committed definitely-not-sent outcome permits a new reservation. This exercises abrupt process death after those commits; it does not simulate power loss or every possible crash instruction.
 
 [GitHub verification run 39298108820](https://github.com/gbettineschi/agent-handler/actions/runs/39298108820), at code/test commit `17a668ae6bf194b318cc368835bb0c71f6bbd51d`, passed on the `macos-15` ARM64 runner with Swift 6.1.2. It ran all 45 tests, built the release app, ran the controller demo and verified the ad-hoc signature. Local verification used Swift 6.3.3.
+
+[GitHub verification run 39304238702](https://github.com/gbettineschi/agent-handler/actions/runs/39304238702), at code/test commit `46ea6e3326569147f412f6c8a548a05977a7a70f`, passed all 51 tests, the release build, controller demo and signature verification. Later documentation-only commits do not change the tested code.
 
 The first CI runs exposed socket-fixture timeouts that did not reproduce locally. Each fixture's lifetime-long accept loop now owns a dedicated thread instead of occupying the shared dispatch pool. The subsequent CI run passed; shared-pool starvation is the suspected cause of the original failures, not a separately proven diagnosis. Test deadlines were not increased.
 
@@ -58,10 +60,9 @@ After the retention fix, another 30.02-second live sample used 0.17 CPU seconds 
 2. Disconnect or quit the host, then reconnect. Pending cards should disable and recover only from fresh authoritative state.
 3. Restart the whole app after an uncertain native send; verify that request cannot be resent. Ledger subprocess crash checks and synthetic uncertain-delivery tests already pass.
 4. Real sleep/wake, multiple displays, menu fallback, full keyboard navigation and focus behavior while another app is active.
+5. Independently exercise regular Chat mode and design/test a separate Claude Desktop adapter. Neither is covered by the Work-mode results.
 
 Synthetic tests are not proof that these live interaction checks passed. Native approval support is outside this milestone.
-
-5. Independently exercise regular Chat mode and design/test a separate Claude Desktop adapter. Neither is covered by the Work-mode results.
 
 ## Independent review
 
