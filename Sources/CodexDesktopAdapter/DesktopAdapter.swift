@@ -9,9 +9,10 @@ public actor DesktopAdapter: ResponseTransport {
     public nonisolated let installation: String
     private var task: Task<Void, Never>?
     private var wanted: Set<String> = []
-    private var epochs: [String: (owner: String, epoch: UUID)] = [:]
+    private var epochs: [RequestScope: (owner: String, epoch: UUID)] = [:]
     private var generation = UUID()
     private var known = 0
+    private var unsupportedApprovals: Set<String> = []
     private var deliveries: [UUID: Task<DeliveryOutcome, Never>] = [:]
     public init(directory: URL, controller: RequestController) {
         self.directory = directory; self.controller = controller
@@ -32,49 +33,66 @@ public actor DesktopAdapter: ResponseTransport {
         }
     }
     public func stop() async {
-        generation = UUID(); task?.cancel(); task = nil; stream.stop(); wanted = []; known = 0
+        generation = UUID(); task?.cancel(); task = nil; stream.stop(); wanted = []; known = 0; unsupportedApprovals = []
         for delivery in deliveries.values { delivery.cancel() }
         let previous = epochs; epochs = [:]
-        for thread in previous.keys { _ = await controller.begin(scope: scope(thread)) }
+        for scope in previous.keys { _ = await controller.begin(scope: scope) }
     }
     public func health() -> Health {
-        .init(followed: wanted.count, known: known, message: wanted.isEmpty ? "No conversations selected" :
-              known == 0 ? "Desktop unavailable or incompatible — use the source app" : "Observing \(known) Desktop conversations · questions only")
+        let message = wanted.isEmpty ? "No conversations selected" :
+            known == 0 ? "Desktop unavailable or incompatible — use the source app" :
+            "Observing \(known) Desktop conversations · questions and supported approvals"
+        return .init(followed: wanted.count, known: known, message: message +
+            (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"))
     }
-    private func scope(_ thread: String) -> RequestScope { .init(installation: installation, conversation: thread) }
     private func reconcile(token: UUID) async {
         guard token == generation else { return }
         let threads = stream.threads
         known = 0
-        for (thread, entry) in epochs where threads[thread] == nil || !wanted.contains(thread) {
-            await controller.invalidate(scope: scope(thread), epoch: entry.epoch)
+        unsupportedApprovals = unsupportedApprovals.intersection(wanted)
+        for (scope, entry) in epochs where threads[scope.conversation] == nil || !wanted.contains(scope.conversation) {
+            await controller.invalidate(scope: scope, epoch: entry.epoch)
             guard token == generation else { return }
-            epochs.removeValue(forKey: thread)
+            epochs.removeValue(forKey: scope)
         }
         for threadID in wanted.sorted() {
             guard let thread = threads[threadID] else { continue }
-            let epoch: UUID
-            if let current = epochs[threadID], current.owner == thread.ownerClientID { epoch = current.epoch }
-            else {
-                epoch = await controller.begin(scope: scope(threadID))
-                guard token == generation else { await controller.invalidate(scope: scope(threadID), epoch: epoch); return }
-                epochs[threadID] = (thread.ownerClientID, epoch)
-            }
-            do {
-                let requests = try DesktopQuestions.parse(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation)
+            var recognized = false
+            for isApproval in [false, true] {
+                let source = RequestScope(installation: isApproval ? DesktopApprovals.installation(installation) : installation, conversation: threadID)
+                let epoch: UUID
+                if let current = epochs[source], current.owner == thread.ownerClientID { epoch = current.epoch }
+                else {
+                    epoch = await controller.begin(scope: source)
+                    guard token == generation else { await controller.invalidate(scope: source, epoch: epoch); return }
+                    epochs[source] = (thread.ownerClientID, epoch)
+                }
+                do {
+                    let requests = isApproval
+                        ? try DesktopApprovals.pending(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation).map(\.request)
+                        : try DesktopQuestions.parse(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation)
+                    guard token == generation else { return }
+                    await controller.observe(.init(scope: source, epoch: epoch, revision: thread.revision, requests: requests))
+                    if isApproval { unsupportedApprovals.remove(threadID) }
+                    if !isApproval || !requests.isEmpty { recognized = true }
+                } catch {
+                    if isApproval { unsupportedApprovals.insert(threadID) }
+                    await controller.invalidate(scope: source, epoch: epoch)
+                }
                 guard token == generation else { return }
-                await controller.observe(.init(scope: scope(threadID), epoch: epoch, revision: thread.revision, requests: requests))
-                known += 1
-            } catch { await controller.invalidate(scope: scope(threadID), epoch: epoch) }
-            guard token == generation else { return }
+            }
+            if recognized { known += 1 }
         }
     }
     public func deliver(_ attempt: ResponseAttempt) async -> DeliveryOutcome {
-        guard attempt.request.key.scope.installation == installation, !Task.isCancelled else { return .notSent }
+        guard [installation, DesktopApprovals.installation(installation)].contains(attempt.request.key.scope.installation), !Task.isCancelled else { return .notSent }
         let directory = directory, stream = stream, installation = installation
         let delivery = Task.detached(priority: .userInitiated) { () -> DeliveryOutcome in
             var wrote = false
             do {
+                if attempt.request.key.scope.installation == DesktopApprovals.installation(installation) {
+                    return try DesktopApprovals.deliver(attempt, directory: directory, stream: stream, installation: installation, didWrite: { wrote = true })
+                }
                 let request = attempt.request, threadID = request.key.scope.conversation
                 guard request.key.turn != nil, case .string(let nativeID) = request.key.nativeID else { return .notSent }
                 let wire = try DesktopIPC(path: directory.appendingPathComponent("ipc/ipc.sock").path, timeout: 10)

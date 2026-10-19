@@ -5,7 +5,7 @@ import Foundation
 /// so later nested patches can be ignored without losing array positions or stream revisions.
 enum DesktopProjection {
     private static let itemFields: Set<String> = ["type", "id", "questions", "status", "content", "input"]
-    private static let turnFields: Set<String> = ["turnId", "status", "items", "itemsPagination"]
+    private static let turnFields: Set<String> = ["turnId", "status", "items", "itemsPagination", "params"]
 
     static func compact(_ state: inout JSONValue) {
         state.projectMember("turns") { turns in
@@ -31,6 +31,11 @@ enum DesktopProjection {
         turn = .null
         for key in fields.keys where !turnFields.contains(key) { fields[key] = .discarded }
         turn = .object(fields)
+        turn.projectMember("params") { params in
+            guard case .object(var fields) = params else { return }
+            for key in fields.keys where !["approvalsReviewer", "approvalPolicy", "sandboxPolicy"].contains(key) { fields[key] = .discarded }
+            params = .object(fields)
+        }
         turn.projectMember("items") { items in
             guard case .array(var values) = items else { return }
             items = .null

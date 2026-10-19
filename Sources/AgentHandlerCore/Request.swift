@@ -28,8 +28,9 @@ public struct AttentionRequest: Equatable, Codable, Sendable {
     public let owner: String
     public let title: String
     public let content: RequestContent
-    public init(key: RequestKey, owner: String, title: String, content: RequestContent) {
-        self.key = key; self.owner = owner; self.title = title; self.content = content
+    public let sourceFingerprint: String?
+    public init(key: RequestKey, owner: String, title: String, content: RequestContent, sourceFingerprint: String? = nil) {
+        self.key = key; self.owner = owner; self.title = title; self.content = content; self.sourceFingerprint = sourceFingerprint
     }
     public var fingerprint: String { stableDigest(self) }
     var isValid: Bool {

@@ -1,0 +1,5 @@
+{
+  "name": "agent-handler-compatibility-probe",
+  "version": "0.0.1",
+  "description": "Temporary Agent Handler diagnostic: records hook event types locally, without answering or approving anything."
+}

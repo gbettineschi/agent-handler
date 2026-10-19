@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/probe.py\"", "timeout": 5}]}],
+    "PreToolUse": [{"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "/usr/bin/python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/probe.py\"", "timeout": 5}]}],
+    "PermissionRequest": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/probe.py\"", "timeout": 5}]}],
+    "PostToolUse": [{"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "/usr/bin/python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/probe.py\"", "timeout": 5}]}]
+  }
+}

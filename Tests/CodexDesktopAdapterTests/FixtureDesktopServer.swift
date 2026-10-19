@@ -48,7 +48,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
     var methods: [String] { lock.withLock { received.compactMap { $0["method"].stringValue } } }
     var answers: [JSONValue] {
         lock.withLock { received.filter {
-            ["thread-follower-submit-mcp-server-elicitation-response", "thread-follower-steer-turn", "thread-follower-start-turn"].contains($0["method"].stringValue ?? "")
+            ["thread-follower-command-approval-decision", "thread-follower-submit-mcp-server-elicitation-response", "thread-follower-steer-turn", "thread-follower-start-turn"].contains($0["method"].stringValue ?? "")
         } }
     }
     /// How many times a thread was asked for: followed, or followed again for its whole state.
@@ -118,10 +118,16 @@ final class FixtureDesktopServer: @unchecked Sendable {
 
     func stop() {
         resumeDiscoveryResponses()
-        let active = lock.withLock { () -> Set<Int32> in stopped = true; return peers }
-        for peer in active { Darwin.shutdown(peer, SHUT_RDWR) }
+        let shouldStop = lock.withLock { () -> Bool in
+            guard !stopped else { return false }
+            stopped = true; return true
+        }
+        guard shouldStop else { return }
+        // Do not let a different fixture reuse this descriptor while the accept loop owns it.
+        precondition(finished.wait(timeout: .now() + 2) == .success, "Fixture accept loop did not stop")
         Darwin.close(listener)
-        _ = finished.wait(timeout: .now() + 2)
+        // Peer threads remove themselves under this lock before closing their descriptors.
+        lock.withLock { for peer in peers { Darwin.shutdown(peer, SHUT_RDWR) } }
         try? FileManager.default.removeItem(at: directory)
     }
 
@@ -161,6 +167,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
         while !lock.withLock({ stopped }) {
             var entry = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
             guard poll(&entry, 1, 100) > 0, entry.revents & Int16(POLLIN) != 0 else { continue }
+            guard !lock.withLock({ stopped }) else { return }
             let connection = Darwin.accept(listener, nil, nil)
             guard connection >= 0 else { return }
             lock.withLock { _ = peers.insert(connection) }
@@ -202,7 +209,8 @@ final class FixtureDesktopServer: @unchecked Sendable {
                 reply["resultType"] = .string("error")
                 reply["error"] = .string("no-client-found")
             }
-        case "thread-follower-submit-mcp-server-elicitation-response":
+        case "thread-follower-command-approval-decision", "thread-follower-submit-mcp-server-elicitation-response":
+            if dropAnswer { throw FixtureFailure.socket }
             reply["handledByClientId"] = owner.map(JSONValue.string) ?? .null
             reply["result"] = .object(["method": .string(method), "result": .object(["ok": .bool(acknowledges)])])
         case "thread-follower-steer-turn":

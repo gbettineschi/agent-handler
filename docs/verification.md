@@ -2,7 +2,7 @@
 
 ## Automated checks
 
-On 2026-10-19, **51 tests across 11 suites passed locally and in macOS CI** using `scripts/test.sh`. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
+On 2026-10-19, the expanded approval suite passed **61 tests across 12 suites locally** using `scripts/test.sh`. The previous 51-test question milestone passed macOS CI, as linked below; the expanded suite's CI result is recorded separately. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
 
 Coverage includes independent IDs, integer/string distinction, duplicate submissions, changed content, stale generations/revisions, scoped withdrawal, durable reservations, restart uncertainty, lost/mismatched receipts, owner changes, pre-send cancellation, revision gaps, frame fragmentation/limits, unknown stream versions, metadata discovery and panel geometry. Storage failure and Desktop's unset metadata flag were reproduced as failing regressions before fixing them.
 
@@ -62,7 +62,21 @@ After the retention fix, another 30.02-second live sample used 0.17 CPU seconds 
 4. Real sleep/wake, multiple displays, menu fallback, full keyboard navigation and focus behavior while another app is active.
 5. Independently exercise regular Chat mode and design/test a separate Claude Desktop adapter. Neither is covered by the Work-mode results.
 
-Synthetic tests are not proof that these live interaction checks passed. Native approval support is outside this milestone.
+Synthetic tests are not proof that these live interaction checks passed. Selected native approval contracts are now implemented, but their native acceptance remains unverified.
+
+## Approval expansion and surface audit
+
+The approval tests cover exact integer/string IDs, complete settings, automatic-review rejection, malformed/oversized requests, unknown decisions, exact command-rule objects, restricted empty confirmation forms, changes under the same request ID, separate question/approval scopes, exact native routing, lost/negative/positive dispatch acknowledgments, no retry and authoritative withdrawal. Tests reproduced the review findings before fixes: omitted permission settings were accepted, and unknown JSON Schema validation keywords could be mistaken for an empty form.
+
+A native harmless print request was captured from the real owner stream. The initial parser rejected its structured `acceptWithExecpolicyAmendment` choice; that exact shape now has a regression and bounded native mapping. A separate read-only snapshot showed `auto_review` for the current turn and `guardian_subagent` for current permissions despite a user-reported human approval. The adapter does not reinterpret these as user review. No native approval was answered through Agent Handler, and its native command/browser/app acceptance tests remain open.
+
+Independent review found no remaining blocker after the setting/schema fixes and command-rule mapping. Long saved-rule labels now explicitly wrap in the scrollable request view; a long native rule still needs a visual acceptance check. Diagnostics report question and approval counts separately. Unsupported approval parsing now produces a health warning, and the empty panel says “No requests to show” rather than asserting that the user has no pending work anywhere.
+
+One intermediate full test run reported an intermittent completed-question test failure; the exact failure detail was truncated. Its isolated rerun and subsequent full runs passed. Review identified a real fixture shutdown hazard: closing a listener before its accept loop exits permits descriptor reuse by another concurrent fixture. Teardown now joins that loop before closing and shuts down peer descriptors under the fixture lock. The final 61-test run passed. This correction is not proof that the hazard caused the earlier failure.
+
+See [surface-audit.md](surface-audit.md) for the regular Chat/Claude contract findings, official sources and temporary hook experiment. Neither a rendered source question nor a listed plugin hook is counted as Agent Handler integration.
+
+Claude's native Chat test accepted Blue in the source UI, but the installed event-only probe produced no local callback file. The Cowork attempt produced neither the requested temporary file nor a native question; the account UI showed Free plan, which does not meet Anthropic's documented paid-plan requirement. This is an unavailable test environment, not a failed or verified Cowork adapter. The probe was disabled through the Plugins UI and its switch was verified off. Its uploaded copy is retained, inactive. No paid upgrade or permission change was made.
 
 ## Independent review
 

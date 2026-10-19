@@ -33,8 +33,10 @@ import CodexDesktopAdapter
             try await Task.sleep(for: .milliseconds(100))
         }
         let health = await adapter.health()
+        let pending = await core.snapshot().filter(\.needsAttention)
+        let questions = pending.filter { if case .question = $0.request.content { return true }; return false }.count
         let output: [String: Any] = ["mode": "read-only", "candidateCount": ids.count,
-            "compatibleOwnerStreams": health.known, "pendingQuestions": await core.snapshot().filter(\.needsAttention).count,
+            "compatibleOwnerStreams": health.known, "pendingQuestions": questions, "pendingApprovals": pending.count - questions,
             "streamVersion": health.known > 0 ? 11 : 0, "status": health.message]
         print(String(decoding: try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self))
         await adapter.stop()

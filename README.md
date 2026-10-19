@@ -2,7 +2,7 @@
 
 A small native macOS companion for agent questions, built around an independent request controller and a minimal notch interface.
 
-**Development build.** The first live adapter targets asynchronous questions in existing Codex/ChatGPT Work Desktop conversations. Approval choices are covered by the core and fixture tests; live command, browser, app and Claude approvals are not implemented yet. Regular Chat mode and Claude Desktop are not verified integrations. The Desktop adapter uses private IPC and can require maintenance after host updates.
+**Development build.** Asynchronous questions in existing Codex/ChatGPT Work Desktop conversations have passed native answer tests. A new approval adapter implements selected command, browser-origin and app confirmation contracts, with synthetic round-trip tests; native approval acceptance is still unverified. Live testing found an automatic-review metadata mismatch, so that case stays disabled. Regular Chat mode and Claude Desktop do not yet have verified adapters. The Desktop adapter uses private IPC and can require maintenance after host updates. See the [coverage audit](docs/surface-audit.md) and [verification record](docs/verification.md).
 
 ## Run locally
 

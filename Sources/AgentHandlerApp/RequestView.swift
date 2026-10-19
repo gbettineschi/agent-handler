@@ -38,7 +38,7 @@ struct HandlerPanelView: View {
                 }
                 if model.showSettings { settings }
                 else if model.requests.isEmpty {
-                    Spacer(); Text("Nothing needs your attention").frame(maxWidth: .infinity).foregroundStyle(.secondary); Spacer()
+                    Spacer(); Text("No requests to show").frame(maxWidth: .infinity).foregroundStyle(.secondary); Spacer()
                 } else {
                     if model.requests.count > 1 {
                         Picker("Request", selection: Binding(get: { current?.id }, set: { selected = $0 })) {
@@ -61,8 +61,8 @@ struct HandlerPanelView: View {
     private var current: RequestView? { model.requests.first { $0.id == selected } ?? model.requests.first }
     private var settings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Toggle("Connect to Desktop questions", isOn: $model.enabled).disabled(model.demo)
-            Text("Watches up to 16 recent local conversations. Approval integrations are not enabled in this version.").font(.caption).foregroundStyle(.secondary)
+            Toggle("Connect to Desktop", isOn: $model.enabled).disabled(model.demo)
+            Text("Watches up to 16 recent local conversations for questions and supported command, browser and app approvals.").font(.caption).foregroundStyle(.secondary)
             Picker("Display", selection: $model.displayID) {
                 Text("Main display").tag("automatic")
                 ForEach(NSScreen.screens, id: \.localizedName) { screen in
@@ -104,14 +104,19 @@ private struct SingleRequestView: View {
                         if let choice { answer(.option(choice)) } else { answer(.text(text)) }
                     }.buttonStyle(.borderedProminent).disabled(view.state != .pending || (choice == nil && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || text.utf8.count > 16_384)
                 case .approval(let choices):
-                    ForEach(choices, id: \.id) { choice in Button(choice.label) { answer(.decision(choice.id)) }.disabled(view.state != .pending) }
+                    ForEach(choices, id: \.id) { choice in
+                        Button { answer(.decision(choice.id)) } label: {
+                            Text(choice.label).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }.disabled(view.state != .pending)
+                    }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     private var status: String {
         switch view.state {
-        case .sending: "Waiting for the source app to confirm…"
+        case .sending: "Sending to the source app…"
         case .uncertain: "Delivery is uncertain. Continue in the source app; this answer will not be resent."
         case .unavailable, .rejected: "Source state is unavailable. Continue in the source app."
         default: "Request ended."
