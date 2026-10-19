@@ -34,7 +34,8 @@ Files: new DesktopApprovals.swift and DesktopApprovalTests.swift; DesktopAdapter
 
 ## Task 2: Native acceptance and remaining verification
 
-- [ ] Test a harmless real user-reviewed approval through the running app; confirm the source tool outcome and withdrawal, record what acknowledgment actually proves.
+- [x] Test a real user-reviewed app approval: Clock access resumed, the card withdrew and the durable entry closed. Exact persistence choice/accepted receipt was not captured.
+- [ ] Verify a real shell approval and a browser-origin approval separately, with eligible native settings and source continuation.
 - [x] Test connection disable/re-enable and app restart with a real pending request. Verify only fresh state re-enables actions. Answer arrival and withdrawal passed; the ledger closed without an exact accepted receipt. Source-host restart remains untested.
 - [ ] Retest a completed-turn question only with a fresh request; never resend the previously answered Blue request.
 - [x] Audit regular Chat's actual question protocol and Claude Desktop Chat/Cowork transports/hooks. If no external adapter contract can be established, document the precise missing interface and feasible compromises instead of shipping a fake integration.
@@ -51,4 +52,6 @@ User scope: finish Codex shell/browser approvals and reconnect behavior before U
 - [x] Add controlled Unix-socket tests in `DesktopApprovalReconnectTests.swift` for exact browser response scopes, changed approvals after EOF/reconnect, uncertain delivery across SQLite/controller reopen and stopping before the decision write. `FixtureDesktopServer.disconnectFollowers()` shuts down only synthetic follower sockets.
 - [x] Reproduce and fix definite-non-delivery recovery in `RequestController`: a new scope epoch must remain unavailable without fresh source state; a proven `notSent`/`rejected` ledger outcome can restore a fresh uncertain record to pending, regardless of snapshot/receipt ordering. Unknown delivery remains blocked. Cover both event orders and a changed request body in `ControllerTests` before implementation.
 - [ ] Run the full suite, release bundle, signature and diff checks. Review the recovery safety change, publish private-branch changes and verify macOS CI.
-- [ ] Update live acceptance/setup notes with exact results. Real shell/browser decisions still require a native human-review request under eligible effective settings; do not change source policy from the companion or manufacture a native pass from fixtures.
+- [x] Update live acceptance/setup notes with exact results. Real shell/browser decisions still require a native human-review request under eligible effective settings; do not change source policy from the companion or manufacture a native pass from fixtures.
+
+Follow-up result: the non-delivery regressions failed before the core fix and passed afterward. Full105/18 passed, release bundle/signature passed; independent focused review found no defects and passed its additional real-SQLite controls. Native own-app restart/question delivery/closure passed. Publication/CI verification follows; real shell/browser gates stay unchecked until the source host actually produces a human request.

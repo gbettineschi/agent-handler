@@ -1,8 +1,8 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception.
+This is a development milestone, not universal agent interception. The current backend suite passes 105 test functions across 18 suites; native acceptance is listed separately below.
 
-| Surface | Implemented | Evidence on 2026-10-19 |
+| Surface | Implemented | Evidence through 2026-10-20 |
 | --- | --- | --- |
 | Codex/ChatGPT Work Desktop async questions | Native observation, free text and single-choice responses | Option and typed answers arrived in the native conversation. A completed-turn Blue/Green question was also detected and answered; the native reply started a new turn. Clean receipt settlement for that idle path still needs a fresh live check. |
 | Codex/ChatGPT Work activity | Latest-turn backend and socket integration pass | All 76 earlier tests passed once permissions allowed sockets. A read-only native probe of this conversation reported one running Work turn. Native completion/reconnect/sleep-wake checks and completion notifications remain separate. |
@@ -12,13 +12,13 @@ This is a development milestone, not universal agent interception.
 | Claude answer / approval delivery | Not implemented | Reading a permission log is not a live callback. The source app still handles responses; the new observer never creates answerable requests. CLI was signed out and Desktop showed Free during inspection. |
 | Answering in the source app | Reply envelopes withdraw matching requests | Two user replies in the source conversation cleared their previously visible Agent Handler cards. The computer tool cannot itself click the source app; cleanup was checked in Agent Handler. |
 | Multiple questions and conversations | Independent request identity and scoped state | Two simultaneous native questions tested; answering one retained the other. Multiple conversations remain core/socket-fixture tested. |
-| Codex command approvals | Adapter implemented; native acceptance unverified | Exact command/directory/reason, native choices including a bounded saved command rule, current owner and whole-request/settings fingerprint. A real request was captured on an automatic-review turn. The current user-reviewed turn uses granular settings with shell/rule prompts disabled; the live shell round trip remains pending. |
+| Codex command approvals | Adapter implemented; native acceptance unverified | Exact command/directory/reason, native choices including a bounded saved command rule, current owner and whole-request/settings fingerprint. A real request was captured on an automatic-review turn. The saved projectless granular preset disables shell/rule prompts; a later active native turn reports user/never/full access despite the composer label. See live-approval-setup.md. Native shell acceptance remains pending. |
 | Codex app approvals | Restricted adapter; live Clock round trip passed | The user allowed the waiting Clock access request through Agent Handler. The native computer tool resumed with Clock's interface, the card cleared, and the latest ledger entry closed. Complete user-reviewed settings and enabled MCP category required. Exact scope button/accepted receipt was not captured. |
-| Codex browser-origin approvals | Restricted adapter implemented; synthetic evidence | Known empty-form confirmations and native persistence scopes only. Strict five-flag granular policy support permits enabled MCP prompts. Browser native round trip remains pending. |
+| Codex browser-origin approvals | Restricted adapter implemented; synthetic evidence | Known empty-form confirmations and native persistence scopes only. Controlled socket routing, deny/scope preservation, changed-request reconnect and SQLite reopen tests pass. The native navigation produced no card; browser acceptance remains pending. |
 | File diffs, network/additional permission grants, arbitrary forms and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
 | Notch and menu fallback | Native AppKit/SwiftUI interface | Panel, text entry, option selection, request selector, × close button, Escape and collapse/reopen tested through computer use. Menu fallback, multiple displays and full keyboard navigation remain pending. |
-| Restart and uncertain delivery | Durable ledger and generation fencing | Whole-app restart retained a native pending question. SQLite reopen, concurrency and SIGKILL checks pass at three committed ledger checkpoints. Native uncertain-send restart and real sleep/wake remain pending. |
+| Restart and uncertain delivery | Durable ledger and generation fencing | Fresh native pending-question recovery and an answer through the restarted app passed again. Controlled EOF/reconnect, stop-before-write, SQLite reopen and crash checks pass. Definite non-delivery can recover only with fresh state; uncertain sends stay blocked. Source-host restart, native uncertain-send restart and real sleep/wake remain pending. |
 
 ## Tested host
 

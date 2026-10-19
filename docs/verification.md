@@ -60,13 +60,13 @@ After the retention fix, another 30.02-second live sample used 0.17 CPU seconds 
 
 ## Acceptance still required
 
-1. Complete a fresh completed-turn question and confirm the native start-turn receipt settles cleanly after the controller fix. The previous answer reached the source, but its exact receipt was not captured.
-2. Disconnect or quit the host, then reconnect. Pending cards should disable and recover only from fresh authoritative state.
-3. Restart the whole app after an uncertain native send; verify that request cannot be resent. Ledger subprocess crash checks and synthetic uncertain-delivery tests already pass.
-4. Real sleep/wake, multiple displays, menu fallback, full keyboard navigation and focus behavior while another app is active.
-5. Independently exercise regular Chat mode and design/test a separate Claude Desktop adapter. Neither is covered by the Work-mode results.
+1. Real user-reviewed shell and browser-origin decisions, each through Agent Handler with source continuation and withdrawal. The real Clock app approval is a separate passing result. See the [prepared setup](live-approval-setup.md) for the current saved-versus-active policy discrepancy.
+2. A fresh completed-turn question with an exact native start-turn receipt. Answer arrival and withdrawal have passed; clean idle-receipt settlement remains unverified.
+3. Source-host loss/restart, distinct from the passing Agent Handler connection toggle and application restart. Controlled socket EOF/reconnect cases pass.
+4. Whole-app restart after a truly uncertain native send. Synthetic SQLite/controller reopen and ledger SIGKILL checks pass; they do not establish this native case.
+5. Real sleep/wake. Display/keyboard/UI checks stay deferred with UI work. Ordinary ChatGPT Chat remains deferred and paid Claude live tests remain pending.
 
-Synthetic tests are not proof that these live interaction checks passed. Selected native approval contracts are now implemented, but their native acceptance remains unverified.
+Synthetic tests are not proof that these live interaction checks passed.
 
 ## Approval expansion and surface audit
 
@@ -155,3 +155,29 @@ The previously running development app was stopped and the verified bundle relau
 The user confirmed that no paid Claude account is available at present. Fresh Cowork/Code observation and response tests remain unavailable; ordinary cloud Claude Chat and cloud-only sessions without compatible local audits remain unsupported. Claude question/approval response delivery is not implemented. Regular ChatGPT Chat remains deferred. No subscription or source permission setting was changed.
 
 The private branch `fix/granular-approval-policy` was published. Code commit `bd0c24e` passed [GitHub macOS verification](https://github.com/gbettineschi/agent-handler/actions/runs/39333576868): synthetic suite, release bundle, controller demo and strict signature verification all succeeded. This supersedes the earlier network/sandbox-limited results for the same backend work.
+
+
+## Codex approval and reconnect pass — 20 October 2026
+
+The user requested remaining shell/browser approval and reconnect checks before UI, leaving paid Claude live tests pending.
+
+### Native observations
+
+The composer was user-reported as **Ask for approval**. A read-only check of the exact saved thread preset found the granular workspace selection with shell/rule categories disabled. A separate native owner-stream snapshot (revision 19615) reported reviewer `user`, policy `never` and sandbox `dangerFullAccess` in both active-turn parameters and current permissions. The execution environment also reports `never`. These are different stored and active facts, not an automatic-review finding. The cause of the host discrepancy is still unproven. No source policy was changed, and a prohibited shell escalation was not attempted.
+
+One harmless browser navigation completed with no human approval. Agent Handler showed only the test question, with no browser approval; the tab was closed. This is not a browser acceptance pass.
+
+A fresh native reconnect card remained visible with its option, text and Send controls disabled while the Desktop connection was off. Re-enabling showed unavailable state first, followed by a compatible owner. User-submitted replies withdrew both test cards. This verifies disconnect/fresh recovery and source-reply cleanup, not an automated answer through Agent Handler for that first card.
+
+A second fresh native question was left pending while the Agent Handler process was terminated and relaunched into the updated release bundle. The app launched collapsed, recovered the exact card and enabled its option only after native discovery. Computer use selected **Restart verified** and clicked **Send answer**. That exact answer arrived in the source conversation, the panel cleared and a read-only production-ledger check showed one additional `closed` entry at **2026-10-19 22:33:10 UTC** (20 October locally). The fresh read-only Work probe then found one version-11 owner, zero pending questions and zero approvals. This verifies whole-Agent-Handler restart, answer arrival and durable withdrawal; it does not capture an exact accepted receipt or restart the source host. The panel was left collapsed.
+
+### Definite non-delivery recovery fix
+
+New controlled socket tests reproduced an availability defect for both command and browser approvals: stop during owner-discovery preflight sent no decision, but a new epoch retained the request as uncertain even after the ledger recorded `notSent`. Core regressions reproduced both snapshot/receipt arrival orders with a changed request body; `notSent` and `rejected` failed recovery while genuinely uncertain delivery remained blocked.
+
+The controller now restores an uncertain record to pending only when current native state is fresh and a durable ledger entry proves definite non-delivery. If the old preflight finishes after a new snapshot, the controller checks the persisted entry and attempt identity before restoring the new explicit choice. It never resends the old choice. Existing accepted-receipt owner/epoch/body guards remain intact. A real SQLite control verifies a late non-delivery result cannot undo durable closure or unlock a reused identity.
+
+The new socket suite covers exact browser accept/deny routing and persistence scope, EOF/reconnect with changed command/browser payloads and stale click rejection, lost or acknowledged decisions across SQLite/controller reopen, and stop/cancellation before the decision write. The complete **105-test / 18-suite** suite passed; the release bundle and strict signature verified. Native shell/browser decisions remain separate pending acceptance gates.
+
+
+Independent review of `663253d..14b7264` found no Critical/Important/Minor defect. Its isolated socket/controller/safety run passed 17 test functions across three suites, including 10 extra SQLite owner-change, late-closure and read-failure cases. Those three controls were retained as `RecoverySafetyTests`; the executor's full 105-test run includes them. The reviewer did not independently operate the native host and did not verify shell/browser acceptance, source-host restart or native uncertain-send restart.
