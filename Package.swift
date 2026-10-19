@@ -5,7 +5,8 @@ let package = Package(
     name: "AgentHandler", platforms: [.macOS(.v14)],
     products: [.library(name: "AgentHandlerCore", targets: ["AgentHandlerCore"])],
     targets: [
-        .target(name: "AgentHandlerCore"),
-        .testTarget(name: "AgentHandlerCoreTests", dependencies: ["AgentHandlerCore"])
+        .systemLibrary(name: "CSQLite"),
+        .target(name: "AgentHandlerCore", dependencies: ["CSQLite"]),
+        .testTarget(name: "AgentHandlerCoreTests", dependencies: ["AgentHandlerCore", "CSQLite"])
     ], swiftLanguageModes: [.v6]
 )
