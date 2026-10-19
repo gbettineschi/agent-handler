@@ -80,6 +80,16 @@ One intermediate full test run reported an intermittent completed-question test 
 
 See [surface-audit.md](surface-audit.md) for the regular Chat/Claude contract findings, official sources and temporary hook experiment. Neither a rendered source question nor a listed plugin hook is counted as Agent Handler integration.
 
+## Granular-policy follow-up
+
+A later active turn changed from `auto_review` to `user`, confirmed in its execution record. It uses the installed host's projectless granular preset: shell/rule/skill approval prompts are disabled, while MCP elicitation and permission requests are enabled. The user confirmed the composer says “Ask for approval.” Saved host state selected `granular`; read-only thread metadata and the app connector confirmed no local project membership. This is distinct from the earlier automatic-review turn. See [live-approval-setup.md](live-approval-setup.md) for the prepared source-project handoff; effective policy must be inspected again after it, not assumed from membership.
+
+The string-only approval-policy parser rejected a valid native MCP confirmation under this preset. The new parser regression failed with `unsupported` before strict granular decoding and category gating were added, then passed. It also checks unknown/missing/non-Boolean flags, each command category disabled independently, exact MCP payloads and fingerprint changes after effective-policy changes. A read-only reviewer found no blocking defect; command-category edge cases suggested in review were added.
+
+The complete local invocation ran 62 tests and reported 22 socket-related case issues in `DesktopSocketTests`, `DesktopAdapterTests`, `nativeApprovalDispatchIsNotAnExecutionReceipt`, and `approvalsStayIndependentFromIncompleteQuestionHistory`: the sandbox disallowed fixture sockets. Escalation was explicitly rejected by the granular policy before execution. The filtered **46 tests across 10 suites passed**, and the updated release bundle and ad-hoc signature verified. The earlier 61-test CI result remains attached to its earlier code commit; the granular change does not yet have a full passing suite or CI result.
+
+The user restarted the updated bundle. A Calculator access check and a public example-page navigation completed without an observed approval card; Agent Handler had no approval to answer. They are **not** passing approval tests. The page was closed. No approval policy was changed, unknown sends retried, or production ledger entries deleted.
+
 Claude's native Chat test accepted Blue in the source UI, but the installed event-only probe produced no local callback file. The Cowork attempt produced neither the requested temporary file nor a native question; the account UI showed Free plan, which does not meet Anthropic's documented paid-plan requirement. This is an unavailable test environment, not a failed or verified Cowork adapter. The probe was disabled through the Plugins UI and its switch was verified off. Its uploaded copy is retained, inactive. No paid upgrade or permission change was made.
 
 ## Independent review

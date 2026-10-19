@@ -31,6 +31,16 @@ The live session also exposed a review-state mismatch: a read-only snapshot repo
 
 The public [app-server protocol](https://learn.chatgpt.com/docs/app-server) and [approval documentation](https://learn.chatgpt.com/docs/agent-approvals-security) help establish schemas, but do not turn Desktop's private owner connection into a supported public API.
 
+### Follow-up: Ask for approval and the granular preset
+
+The earlier active turn's execution record confirms `approvals_reviewer: auto_review`. The subsequent turn after the model change confirms `approvals_reviewer: user` with `approval_policy: {granular: {sandbox_approval: false, rules: false, skill_approval: false, request_permissions: true, mcp_elicitations: true}}`. The user reported “Ask for approval” in the composer. Read-only metadata showed no project membership; the supported app connector listed no projects. Saved host state selected `granular`.
+
+In the installed host, `nwo` selects the granular default for projectless work; the preset in `app-shared-52443cbe9ac4.js` has exactly those five flags and the `user` reviewer. Thus a human reviewer and disabled shell-prompt categories can coexist under that label. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) confirms that false granular categories reject prompts rather than display them. This establishes the current restriction; it does not prove precisely which earlier UI transition kept the old Astra turn on automatic review.
+
+Agent Handler had a separate compatibility defect: it only accepted string approval policies. A regression reproduced rejection of an otherwise valid MCP confirmation under the native granular preset. The parser now validates all five boolean flags exactly, permits MCP only when `mcp_elicitations` is true, and conservatively requires both command categories because the wire request does not identify which one triggered it. Unknown/missing flags and automatic reviewers still disable responding. This change does not alter source settings.
+
+The current sandbox denied direct socket probes and socket fixture setup. The 46 socket-free tests passed, including the new parser regression; the complete 62-test invocation had 22 socket-related case issues. The release bundle and signature passed. These are partial verification results, not a replacement for the full suite or a live approval round trip. Calculator access and a public example-page navigation produced no observed approval card; neither counts as native approval acceptance.
+
 ## Regular ChatGPT Chat
 
 The installed renderer includes Chat-style question widgets carrying `codex_request_user_input` metadata and a tool-role `codex_request_user_input_response` continuation with response-acceptance checks. That path differs from the Work owner's steer/start envelope. Its conversation fetching and live updates belong to authenticated host services; no supported external companion attachment was established in this audit.
@@ -48,6 +58,10 @@ Native `respondToToolPermission` can return normally for a stale ID. Its resolut
 Official [Claude Code hooks](https://code.claude.com/docs/en/hooks) provide a promising supported path: `PreToolUse` can supply an answer to `AskUserQuestion`, and `PermissionRequest` can carry permission decisions. A hook adapter must use per-invocation identity and lifetime; session ID plus input text is insufficient. Exact correlated `PostToolUse` results can provide stronger evidence than merely returning a hook directive.
 
 Claude's [Cowork plugin documentation](https://claude.com/docs/cowork/guide/plugins) supports bundled hooks. [Cowork loads account-enabled plugins at session start](https://claude.com/docs/cowork/overview), separately from CLI-only `~/.claude` configuration. The [third-party-provider Desktop documentation](https://claude.com/docs/third-party/claude-desktop/extensions#plugin-hooks) additionally documents Chat hooks from version 1.52386.0. Its deployment scope must not be silently generalized to the consumer account tested here.
+
+The consumer [plugin help article](https://support.claude.com/en/articles/13837440-use-plugins-in-claude), checked again on 19 October, explicitly limits plugin hooks and sub-agents to Cowork and Claude Code; they do not run in ordinary Chat. It likewise excludes plugin-local MCP servers from Chat. This supplies a documented reason that a listed hook is not consumer Chat coverage. The different third-party-provider deployment documentation does not override that consumer limitation.
+
+The current [Cowork architecture overview](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview) describes cloud execution by default, with local execution retained for existing deployments. Device access uses Anthropic's broker and the desktop app. A future hook adapter must establish its execution location and permitted return channel; it cannot assume every hook runs on the Mac or can reach a Mac Unix socket. The existing Mac-only probe file path is not a universal hook-execution detector.
 
 ### Live plugin experiment
 

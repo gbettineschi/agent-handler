@@ -35,6 +35,13 @@ enum DesktopApprovals {
             let settings = try effectiveSettings(turn?["params"].objectValue == nil ? state["currentPermissions"] : turn!["params"])
             // Never show the automatic review queue as a human permission prompt.
             guard settings["approvalsReviewer"].stringValue == "user" else { throw Failure.unsupported }
+            if let granular = settings["approvalPolicy"]["granular"].objectValue {
+                // The wire request does not identify whether a command prompt came from
+                // the sandbox or an execpolicy rule. Require both categories in that case.
+                let categories = kind == "item/commandExecution/requestApproval"
+                    ? ["sandbox_approval", "rules"] : ["mcp_elicitations"]
+                guard categories.allSatisfy({ granular[$0] == .bool(true) }) else { throw Failure.unsupported }
+            }
             var title: String, method: String, parameter: String
             var responses: [String: JSONValue] = [:], options: [ResponseOption] = []
             if kind == "item/commandExecution/requestApproval" {
@@ -125,9 +132,16 @@ enum DesktopApprovals {
         let settings = JSONValue.object(Dictionary(uniqueKeysWithValues:
             ["approvalsReviewer", "approvalPolicy", "sandboxPolicy"].map { ($0, raw[$0]) }))
         guard complete(settings), settings["approvalsReviewer"].stringValue == "user",
-              ["untrusted", "on-failure", "on-request", "never"].contains(settings["approvalPolicy"].stringValue ?? ""),
               let sandbox = settings["sandboxPolicy"].objectValue,
               let kind = sandbox["type"]?.stringValue else { throw Failure.unsupported }
+        if let policy = settings["approvalPolicy"].stringValue {
+            guard ["untrusted", "on-failure", "on-request", "never"].contains(policy) else { throw Failure.unsupported }
+        } else {
+            let categories: Set<String> = ["sandbox_approval", "rules", "skill_approval", "request_permissions", "mcp_elicitations"]
+            guard let policy = settings["approvalPolicy"].objectValue, Set(policy.keys) == ["granular"],
+                  let granular = policy["granular"]?.objectValue, Set(granular.keys) == categories,
+                  granular.values.allSatisfy({ $0 == .bool(true) || $0 == .bool(false) }) else { throw Failure.unsupported }
+        }
         let allowed: Set<String>
         switch kind {
         case "dangerFullAccess": allowed = ["type"]

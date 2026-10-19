@@ -110,6 +110,61 @@ struct DesktopApprovalTests {
 }
 
 extension DesktopApprovalTests {
+    @Test func granularPolicyAllowsOnlyItsEnabledPromptCategories() throws {
+        // Native Desktop's granular preset permits MCP but forbids shell/rule prompts.
+        let flags: [String: JSONValue] = ["sandbox_approval": .bool(false), "rules": .bool(false),
+            "skill_approval": .bool(false), "request_permissions": .bool(true), "mcp_elicitations": .bool(true)]
+        var state = approvalState()
+        try DesktopPatches.apply([.object(["op": .string("replace"),
+            "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalPolicy")]),
+            "value": .object(["granular": .object(flags)])])], to: &state)
+        #expect(throws: (any Error).self) { _ = try approvals(state) }
+        let nativeMcp: JSONValue = .object(["id": .integer(42), "method": .string("mcpServer/elicitation/request"),
+            "params": .object(["threadId": .string("thread"), "turnId": .string("turn"), "mode": .string("form"),
+                "message": .string("Allow opening the harmless test app?"),
+                "requestedSchema": .object(["type": .string("object"), "properties": .object([:])]),
+                "_meta": .object(["codex_approval_kind": .string("mcp_tool_call"), "connector_id": .string("computer-use"),
+                    "tool_name": .string("get_app_state"), "persist": .array([.string("session")]),
+                    "tool_params": .object(["app": .string("com.example.Test")])])])])
+        try DesktopPatches.apply([.object(["op": .string("replace"), "path": .array([.string("requests")]),
+            "value": .array([nativeMcp])])], to: &state)
+        let pending = try #require(approvals(state).first)
+        #expect(pending.wireID == .integer(42))
+        #expect(pending.responses["session"] == .object(["action": .string("accept"), "content": .object([:]),
+            "_meta": .object(["persist": .string("session")])]))
+        var changedSettings = state
+        try DesktopPatches.apply([.object(["op": .string("replace"),
+            "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalPolicy"), .string("granular"), .string("request_permissions")]),
+            "value": .bool(false)])], to: &changedSettings)
+        #expect(try approvals(changedSettings).first?.request.fingerprint != pending.request.fingerprint)
+        for value: JSONValue in [.bool(false), .null, .string("true")] {
+            var changed = state
+            try DesktopPatches.apply([.object(["op": .string("replace"),
+                "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalPolicy"), .string("granular"), .string("mcp_elicitations")]),
+                "value": value])], to: &changed)
+            #expect(throws: (any Error).self) { _ = try approvals(changed) }
+        }
+        for changedFlags in [flags.filter { $0.key != "rules" }, flags.merging(["future_category": .bool(true)]) { _, new in new }] {
+            var changed = state
+            try DesktopPatches.apply([.object(["op": .string("replace"),
+                "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalPolicy")]),
+                "value": .object(["granular": .object(changedFlags)])])], to: &changed)
+            #expect(throws: (any Error).self) { _ = try approvals(changed) }
+        }
+        var command = approvalState()
+        let commandFlags = flags.merging(["sandbox_approval": .bool(true), "rules": .bool(true)]) { _, new in new }
+        try DesktopPatches.apply([.object(["op": .string("replace"),
+            "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalPolicy")]),
+            "value": .object(["granular": .object(commandFlags)])])], to: &command)
+        #expect(try approvals(command).first?.responses["accept"] == .string("accept"))
+        for disabled in ["sandbox_approval", "rules"] {
+            var changed = command
+            try DesktopPatches.apply([.object(["op": .string("replace"),
+                "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalPolicy"), .string("granular"), .string(disabled)]),
+                "value": .bool(false)])], to: &changed)
+            #expect(throws: (any Error).self) { _ = try approvals(changed) }
+        }
+    }
     @Test(arguments: ["computer-use", "browser-use"]) func elicitationKeepsNativeScopeAndDenyPayload(connector: String) throws {
         var state = approvalState()
         let meta = JSONValue.object(["codex_approval_kind": .string("mcp_tool_call"), "connector_id": .string(connector),
