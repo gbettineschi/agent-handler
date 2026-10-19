@@ -45,4 +45,6 @@ The [approved design](docs/superpowers/specs/2026-10-19-agent-handler-design.md)
 
 Tests bind temporary Unix sockets for synthetic hosts and never connect to a real agent. A restricted development sandbox may need permission to bind those fixture sockets. The test script supports the Command Line Tools Swift Testing framework layout and keeps compiler caches inside `.build`.
 
+After building tests, run `.build/debug/AgentHandlerDiagnostics --demo` for a synthetic controller check, or `--probe [--thread ID]` for a read-only native compatibility sample. The probe never submits an answer. See the [compatibility matrix](docs/compatibility.md) and [verification record](docs/verification.md) for measured results and pending manual checks.
+
 See [third-party notices](THIRD_PARTY_NOTICES.md) for the narrow Agent HUD code adaptations and their Apache-2.0 license. This repository is private; original project code has no public license grant.

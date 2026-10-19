@@ -1,0 +1,20 @@
+name: macOS verification
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Synthetic tests
+        run: scripts/test.sh
+      - name: Development bundle
+        run: scripts/bundle.sh
+      - name: Controller demo
+        run: .build/debug/AgentHandlerDiagnostics --demo
+      - name: Verify ad-hoc signature
+        run: codesign --verify --deep --strict 'dist/Agent Handler.app'
