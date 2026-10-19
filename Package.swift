@@ -11,7 +11,8 @@ let package = Package(
         .target(name: "CodexDesktopAdapter", dependencies: ["AgentHandlerCore", "CSQLite"]),
         .executableTarget(name: "AgentHandlerApp", dependencies: ["AgentHandlerCore", "CodexDesktopAdapter"]),
         .executableTarget(name: "AgentHandlerDiagnostics", dependencies: ["AgentHandlerCore", "CodexDesktopAdapter"]),
-        .testTarget(name: "AgentHandlerCoreTests", dependencies: ["AgentHandlerCore", "CSQLite"]),
+        .executableTarget(name: "LedgerCrashFixture", dependencies: ["AgentHandlerCore"], path: "Tests/Fixtures/LedgerCrashFixture"),
+        .testTarget(name: "AgentHandlerCoreTests", dependencies: ["AgentHandlerCore", "CSQLite", "LedgerCrashFixture"]),
         .testTarget(name: "CodexDesktopAdapterTests", dependencies: ["CodexDesktopAdapter", "AgentHandlerCore", "CSQLite"]),
         .testTarget(name: "AgentHandlerAppTests", dependencies: ["AgentHandlerApp"])
     ], swiftLanguageModes: [.v6]

@@ -108,7 +108,9 @@ final class FixtureDesktopServer: @unchecked Sendable {
             try? FileManager.default.removeItem(at: directory)
             throw FixtureFailure.socket
         }
-        DispatchQueue.global().async { self.serve(); self.finished.signal() }
+        // This loop blocks for the fixture's lifetime. Give it a dedicated thread so parallel
+        // fixtures cannot occupy every worker of a small CI runner's shared dispatch pool.
+        Thread.detachNewThread { self.serve(); self.finished.signal() }
     }
 
     func stop() {

@@ -26,6 +26,7 @@ import CodexDesktopAdapter
     private var lastDiscovery: TimeInterval = 0
     private var metadataSignature = ""
     private var refreshingDiscovery = false
+    private var discoveryWarning: String?
     var placementChanged: (() -> Void)?
     var attentionChanged: (() -> Void)?
 
@@ -94,8 +95,11 @@ import CodexDesktopAdapter
             guard enabled, !sleeping else { return }
             let candidates: [ThreadCandidate]
             switch result {
-            case .success(let values): candidates = values; titles = Dictionary(values.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
-            case .failure: candidates = []; health = "Conversation discovery unavailable; add thread IDs in Settings"
+            case .success(let values):
+                candidates = values; titles = Dictionary(values.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+                discoveryWarning = nil
+            case .failure:
+                candidates = []; discoveryWarning = "Conversation discovery unavailable; add thread IDs in Settings"
             }
             let pinned = requests.map { $0.id.scope.conversation }
             let explicit = extraThreads.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.utf8.count <= 256 }
@@ -104,7 +108,7 @@ import CodexDesktopAdapter
             await adapter.start(threadIDs: Set(selected))
         }
         let state = await adapter.health()
-        health = state.message
+        health = [discoveryWarning, state.message].compactMap { $0 }.joined(separator: "\n")
         if await core.persistenceFailed { issue = "Responses disabled: delivery tracking is unavailable. Use the source app." }
     }
 
