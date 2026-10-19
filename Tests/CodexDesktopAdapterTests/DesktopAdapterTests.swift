@@ -93,10 +93,13 @@ struct DesktopAdapterTests {
         try await eventually { await core.snapshot().count == 2 }
         let request = try #require(await core.snapshot().first)
         let discovered = server.methods.filter { $0 == "thread-owner-discovery" }.count
-        server.discoveryDelay = 0.2
+        server.pauseDiscoveryResponses()
         let sending = Task { try await core.respond(key: request.id, fingerprint: request.request.fingerprint, answer: .text("Yes"), using: adapter) }
         try await eventually { server.methods.filter { $0 == "thread-owner-discovery" }.count > discovered }
+        // The native preflight cannot complete until cancellation has been issued.
+        #expect(server.answers.isEmpty)
         sending.cancel()
+        server.resumeDiscoveryResponses()
         try await sending.value
         #expect(server.answers.isEmpty)
         await adapter.stop()

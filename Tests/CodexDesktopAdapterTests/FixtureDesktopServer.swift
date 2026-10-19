@@ -17,10 +17,11 @@ final class FixtureDesktopServer: @unchecked Sendable {
     private var fixtureState: JSONValue
     private var fixtureOwner: String? = "desktop-owner"
     private var fixtureRevision: Int64 = 1
-    private var fixtureDiscoveryDelay: TimeInterval = 0
-    var discoveryDelay: TimeInterval {
-        get { lock.withLock { fixtureDiscoveryDelay } }
-        set { lock.withLock { fixtureDiscoveryDelay = newValue } }
+    private let discoveryCondition = NSCondition()
+    private var discoveryPaused = false
+    func pauseDiscoveryResponses() { discoveryCondition.withLock { discoveryPaused = true } }
+    func resumeDiscoveryResponses() {
+        discoveryCondition.withLock { discoveryPaused = false; discoveryCondition.broadcast() }
     }
     private let acknowledges: Bool
     private let dropAnswer: Bool
@@ -116,6 +117,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
     }
 
     func stop() {
+        resumeDiscoveryResponses()
         let active = lock.withLock { () -> Set<Int32> in stopped = true; return peers }
         for peer in active { Darwin.shutdown(peer, SHUT_RDWR) }
         Darwin.close(listener)
@@ -192,7 +194,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
             try send(peer, .object(["type": .string("broadcast"), "method": .string("unrelated-event")]))
             reply["result"] = .object(["clientId": .string("fixture-client")])
         case "thread-owner-discovery":
-            Thread.sleep(forTimeInterval: discoveryDelay)
+            try waitForDiscoveryRelease()
             if let owner {
                 reply["handledByClientId"] = .string(owner)
                 reply["result"] = .object([:])
@@ -212,6 +214,15 @@ final class FixtureDesktopServer: @unchecked Sendable {
         default: throw FixtureFailure.protocolError
         }
         try send(peer, .object(reply))
+    }
+
+    private func waitForDiscoveryRelease() throws {
+        discoveryCondition.lock()
+        defer { discoveryCondition.unlock() }
+        let deadline = Date().addingTimeInterval(5)
+        while discoveryPaused {
+            guard discoveryCondition.wait(until: deadline) else { throw FixtureFailure.socket }
+        }
     }
 
     private func send(_ peer: Int32, _ message: JSONValue) throws {
