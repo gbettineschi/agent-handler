@@ -1,6 +1,6 @@
 # Agent Handler: first working version
 
-Status: proposed for review, 19 October 2026. Product implementation has not started.
+Status: approved by the user on 19 October 2026, including planning and implementation without further review pauses.
 Repository destination: **gbettineschi/agent-handler**, private.
 
 ## Purpose and success
