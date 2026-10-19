@@ -6,6 +6,7 @@ import CodexDesktopAdapter
 
 @MainActor final class AppModel: ObservableObject {
     @Published var requests: [RequestView] = []
+    @Published var activities: [ActivityView] = []
     @Published var titles: [String: String] = [:]
     @Published var health = "Starting…"
     @Published var issue: String?
@@ -67,7 +68,7 @@ import CodexDesktopAdapter
         }
         let center = NSWorkspace.shared.notificationCenter
         tokens.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in guard let self else { return }; self.sleeping = true; await self.adapter.stop(); self.health = "Paused during sleep" }
+            Task { @MainActor in guard let self else { return }; self.sleeping = true; await self.adapter.stop(); self.activities = await self.adapter.activity(); self.health = "Paused during sleep" }
         })
         tokens.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in guard let self else { return }; self.sleeping = false; self.lastDiscovery = 0; await self.refreshDiscovery() }
@@ -76,7 +77,7 @@ import CodexDesktopAdapter
 
     private func reconfigure() async {
         guard !demo else { return }
-        await adapter.stop(); lastDiscovery = 0
+        await adapter.stop(); activities = await adapter.activity(); lastDiscovery = 0
         await refreshDiscovery()
     }
     private func refreshDiscovery() async {
@@ -108,6 +109,7 @@ import CodexDesktopAdapter
             await adapter.start(threadIDs: Set(selected))
         }
         let state = await adapter.health()
+        activities = await adapter.activity()
         health = [discoveryWarning, state.message].compactMap { $0 }.joined(separator: "\n")
         if await core.persistenceFailed { issue = "Responses disabled: delivery tracking is unavailable. Use the source app." }
     }

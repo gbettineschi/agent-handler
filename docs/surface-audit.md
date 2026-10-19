@@ -27,7 +27,7 @@ Static host dispatch inspection established that `thread-follower-command-approv
 
 A real command approval was captured on the current conversation's stream. Its choices were `accept`, an `acceptWithExecpolicyAmendment` object, and `cancel`. The initial string-only parser rejected this request. The revised parser preserves the full native object and explicitly labels the saved rule; its regression failed before the change and passed afterward.
 
-The live session also exposed a review-state mismatch: a read-only snapshot reported `auto_review` in the current turn and `guardian_subagent` in current permissions while the user reported a human-facing Codex approval. These are not treated as `user` review. Native approval display/answer/withdrawal through Agent Handler has therefore **not passed**. A new confirmed user-reviewed turn, or an authoritative native human-handoff signal, is needed before relaxing this restriction. Elapsed time is not such a signal.
+The live session also exposed a review-state mismatch: a read-only snapshot reported `auto_review` in the then-current turn and `guardian_subagent` in current permissions while the user reported a human-facing Codex approval. These are not treated as `user` review. At that stage native approval display/answer/withdrawal had not passed. The later user-reviewed granular turn and Clock result are recorded below; automatic review remains disabled in the adapter.
 
 The public [app-server protocol](https://learn.chatgpt.com/docs/app-server) and [approval documentation](https://learn.chatgpt.com/docs/agent-approvals-security) help establish schemas, but do not turn Desktop's private owner connection into a supported public API.
 
@@ -44,6 +44,12 @@ The current sandbox denied direct socket probes and socket fixture setup. The 46
 The later Clock test did pass a native app approval: the user confirmed allowing it through Agent Handler, the waiting computer tool returned Clock's interface, the panel cleared and a new durable ledger entry closed. This establishes app-approval response delivery and host continuation under the granular preset. It does not cover shell prompts, browser-origin prompts, every persistence scope, or an exact accepted receipt.
 
 ## Regular ChatGPT Chat
+
+The user's revised scope is **activity and completion tracking only** for regular Chat; interactive questions and approvals remain Work capabilities in our implementation scope. The earlier question audit below is historical protocol evidence, not an outstanding request for another Chat question test.
+
+The installed renderer handles a Chat `conversation-turn-complete` pubsub event and separate streaming/async state. The official [notification documentation](https://learn.chatgpt.com/docs/notifications) describes completion alerts and the Activity view, but does not establish an external event subscription for companions. The same host's Work `turn-completed` event is not interchangeable with this Chat event.
+
+Read-only inspection of `~/.codex/sqlite/codex-dev.db` found `local_thread_catalog.chatgpt_async_status`; all 2,056 Chat-source rows were null at the time of inspection (including 28 Work-origin `tpp` entries). This is catalog metadata, not a current lifecycle feed. The timeline ledger contained four records for a VS Code source and none for Chat. Ordinary `chatgpt_pubsub_conversation_update_received` log lines omit conversation and turn identity. Exceptional transport-recovery messages contain a conversation ID, but do not cover all starts/completions. Neither file modification times, unread flags nor reconnection imply a completed response. No ordinary Chat activity adapter was implemented from these incomplete signals.
 
 The installed renderer includes Chat-style question widgets carrying `codex_request_user_input` metadata and a tool-role `codex_request_user_input_response` continuation with response-acceptance checks. That path differs from the Work owner's steer/start envelope. Its conversation fetching and live updates belong to authenticated host services; no supported external companion attachment was established in this audit.
 
@@ -78,5 +84,5 @@ A fresh Cowork test requested only a labeled file in the repository's temporary 
 1. A confirmed user-reviewed Codex turn: native command Allow once, source result, card withdrawal, then browser/app confirmations separately.
 2. A fresh completed-turn question: exact native reply receipt and sibling retention, without resending an old request.
 3. Claude: prove which session types load hooks, callback identity/lifetime, cancellation behavior, return path and correlated acceptance before implementing a general hook adapter.
-4. Regular Chat: establish an attachable native contract or explicitly choose a cooperative/UI compromise.
+4. Regular Chat: establish a source for activity/completion only, with conversation/turn identity and defined reconnect/replay behavior. A native interactive-question test is no longer required for this scope.
 5. Real host reconnect, sleep/wake and uncertain-send restart, plus remaining display/keyboard checks in [verification.md](verification.md).

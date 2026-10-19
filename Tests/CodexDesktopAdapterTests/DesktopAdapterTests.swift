@@ -13,6 +13,25 @@ func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws 
 }
 
 struct DesktopAdapterTests {
+    @Test func nativeActivityCompletionDisconnectStopAndUnfollow() async throws {
+        let running = try JSONValue.parse(fixtureState(questions: []))
+        let server = try FixtureDesktopServer(state: running)
+        defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.activity().first?.status == .running }
+        let completed = String(decoding: try fixtureState(questions: []), as: UTF8.self)
+            .replacingOccurrences(of: "inProgress", with: "completed")
+        server.state = try JSONValue.parse(Data(completed.utf8))
+        try await eventually { await adapter.activity().first?.status == .completed }
+        server.stop()
+        try await eventually { await adapter.activity().first?.status == .unknown }
+        await adapter.stop()
+        #expect(await adapter.activity().first?.status == .unknown)
+        await adapter.start(threadIDs: [])
+        #expect(await adapter.activity().isEmpty)
+        #expect(await core.snapshot().isEmpty)
+    }
     @Test func replyTurnHydrationPreservesUnansweredSibling() async throws {
         let text = String(decoding: try fixtureState(), as: UTF8.self).replacingOccurrences(of: "inProgress", with: "completed")
         let original = try JSONValue.parse(Data(text.utf8))["turns"].arrayValue![0]

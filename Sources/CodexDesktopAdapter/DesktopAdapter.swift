@@ -14,6 +14,8 @@ public actor DesktopAdapter: ResponseTransport {
     private var known = 0
     private var unsupportedApprovals: Set<String> = []
     private var deliveries: [UUID: Task<DeliveryOutcome, Never>] = [:]
+    private var activityStore = ActivityStore()
+    private var activityOwners: [RequestScope: (owner: String, epoch: UUID)] = [:]
     public init(directory: URL, controller: RequestController) {
         self.directory = directory; self.controller = controller
         stream = DesktopStream(dataDirectory: directory)
@@ -21,6 +23,9 @@ public actor DesktopAdapter: ResponseTransport {
     }
     public func start(threadIDs: Set<String>) {
         wanted = Set(threadIDs.sorted().prefix(16))
+        for scope in Set(activityOwners.keys).union(activityStore.views.map(\.id)) where !wanted.contains(scope.conversation) {
+            activityStore.remove(scope: scope); activityOwners.removeValue(forKey: scope)
+        }
         stream.follow(wanted)
         if task == nil {
             let token = generation
@@ -34,20 +39,26 @@ public actor DesktopAdapter: ResponseTransport {
     }
     public func stop() async {
         generation = UUID(); task?.cancel(); task = nil; stream.stop(); wanted = []; known = 0; unsupportedApprovals = []
+        for (scope, entry) in activityOwners { activityStore.invalidate(scope: scope, epoch: entry.epoch) }
+        activityOwners = [:]
         for delivery in deliveries.values { delivery.cancel() }
         let previous = epochs; epochs = [:]
         for scope in previous.keys { _ = await controller.begin(scope: scope) }
     }
+    public func activity() -> [ActivityView] { activityStore.views }
     public func health() -> Health {
         let message = wanted.isEmpty ? "No conversations selected" :
             known == 0 ? "Desktop unavailable or incompatible — use the source app" :
             "Observing \(known) Desktop conversations · questions and supported approvals"
-        return .init(followed: wanted.count, known: known, message: message +
+        let views = activityStore.views
+        let activity = views.isEmpty ? "" : " · \(views.filter { $0.status == .running }.count) running · \(views.filter { $0.status == .needsInput }.count) need input · \(views.filter { $0.status == .completed }.count) completed · \(views.filter { $0.status == .unknown }.count) unknown"
+        return .init(followed: wanted.count, known: known, message: message + activity +
             (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"))
     }
     private func reconcile(token: UUID) async {
         guard token == generation else { return }
         let threads = stream.threads
+        reconcileActivity(threads)
         known = 0
         unsupportedApprovals = unsupportedApprovals.intersection(wanted)
         for (scope, entry) in epochs where threads[scope.conversation] == nil || !wanted.contains(scope.conversation) {
@@ -82,6 +93,28 @@ public actor DesktopAdapter: ResponseTransport {
                 guard token == generation else { return }
             }
             if recognized { known += 1 }
+        }
+    }
+    private func reconcileActivity(_ threads: [String: DesktopStream.Thread]) {
+        for (scope, entry) in activityOwners where threads[scope.conversation] == nil {
+            activityStore.invalidate(scope: scope, epoch: entry.epoch)
+            activityOwners.removeValue(forKey: scope)
+        }
+        for threadID in wanted.sorted() {
+            guard let thread = threads[threadID] else { continue }
+            let scope = RequestScope(installation: installation, conversation: threadID)
+            let epoch: UUID
+            if let current = activityOwners[scope], current.owner == thread.ownerClientID { epoch = current.epoch }
+            else {
+                epoch = activityStore.begin(scope: scope)
+                activityOwners[scope] = (thread.ownerClientID, epoch)
+            }
+            do {
+                let value = try DesktopActivity.parse(state: thread.state, threadID: threadID,
+                    owner: thread.ownerClientID, installation: installation)
+                activityStore.observe(.init(scope: scope, epoch: epoch, revision: thread.revision,
+                    turnID: value.turnID, phase: value.phase, attention: value.attention))
+            } catch { activityStore.invalidate(scope: scope, epoch: epoch) }
         }
     }
     public func deliver(_ attempt: ResponseAttempt) async -> DeliveryOutcome {

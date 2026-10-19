@@ -107,7 +107,8 @@ public enum DesktopQuestions {
         try turns(state).last { $0["turnId"].stringValue == id }
     }
 
-    private static func turns(_ state: JSONValue, includeOverlay: Bool = true) throws -> [JSONValue] {
+    // Shared structural decoding; callers still establish their own history/attention requirements.
+    static func turns(_ state: JSONValue, includeOverlay: Bool = true) throws -> [JSONValue] {
         guard let fields = state.objectValue else { throw Failure.unsupported }
         let overlay: [JSONValue]
         if let value = fields["turns"] {

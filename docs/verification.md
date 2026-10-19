@@ -94,6 +94,14 @@ A subsequent fresh Clock access request **passed the real app-approval flow**. T
 
 Claude's native Chat test accepted Blue in the source UI, but the installed event-only probe produced no local callback file. The Cowork attempt produced neither the requested temporary file nor a native question; the account UI showed Free plan, which does not meet Anthropic's documented paid-plan requirement. This is an unavailable test environment, not a failed or verified Cowork adapter. The probe was disabled through the Plugins UI and its switch was verified off. Its uploaded copy is retained, inactive. No paid upgrade or permission change was made.
 
+## Activity backend follow-up
+
+The user's clarified ordinary Chat scope is activity/completion tracking, without interactive questions. The implemented backend increment consumes the existing Work owner stream only; ordinary Chat and Claude activity integrations are still pending.
+
+`ActivityTests` and `DesktopActivityTests` cover phase distinctions, attention precedence, scoped owner epochs, revisions, disconnect invalidation, canonical history boundaries, unknown request kinds and visible continuations. They were written before implementation; the new types were initially missing. Additional regressions reproduced a running turn preceding a completed turn and visible pending continuations being classified completed, then passed after conservative rejection was added. The core records latest facts only; it has no notification or response side effects.
+
+The available socket-free command passed **59 test functions across 12 suites**. The complete invocation ran **76 test functions across 14 suites** and reported **23 socket-denial issues**: 15 cases in DesktopAdapterTests, five in DesktopApprovalTests (the native dispatch and incomplete-question-history socket tests), and three in DesktopSocketTests. These include the new completion/disconnect/stop/unfollow fixture, which therefore remains unexecuted here. The release bundle built and `codesign --verify --deep --strict` passed. `git diff --check` passed. No escalation was requested because this turn rejects sandbox approvals. These results do not replace a native activity check, real reconnect/sleep/wake test or full macOS CI run for this revision.
+
 ## Independent review
 
 One fresh-context reviewer inspected the whole implementation and reproduced three Important defects with independent synthetic harnesses. All three were reproduced by failing repository tests and then fixed:

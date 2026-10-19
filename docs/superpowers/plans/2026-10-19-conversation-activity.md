@@ -33,11 +33,11 @@
 
 **Interfaces:** Produces ActivityPhase, ActivityAttention, ActivityStatus, ActivityView, ActivitySnapshot and ActivityStore. Store methods: `begin(scope:) -> UUID`, `observe(_:) -> Bool`, `invalidate(scope:epoch:)`, `remove(scope:)`, and `views: [ActivityView]`. Snapshot carries scope, epoch, revision, turnID, phase, attention. View exposes computed status; unavailable always unknown, then required attention takes precedence, then unknown attention, then phase.
 
-- [ ] Write failing tests for phase mapping, required/unknown attention, invalid identity, stale epoch/revision, unavailable reconnect and independent scopes/removal. Expectations use literal statuses.
-- [ ] Run `scripts/test.sh --filter ActivityTests`; expect failure because ActivityStore does not exist.
-- [ ] Implement the pure store; increasing revisions and exact epochs gate every observation. Invalid higher revisions invalidate and consume the revision floor. Reject empty or over-256-byte turn IDs.
-- [ ] Run `scripts/test.sh --filter ActivityTests`; expect all activity tests pass.
-- [ ] Commit the core and its tests.
+- [x] Write failing tests for phase mapping, required/unknown attention, invalid identity, stale epoch/revision, unavailable reconnect and independent scopes/removal. Expectations use literal statuses.
+- [x] Run `scripts/test.sh --filter ActivityTests`; expect failure because ActivityStore does not exist.
+- [x] Implement the pure store; increasing revisions and exact epochs gate every observation. Invalid higher revisions invalidate and consume the revision floor. Reject empty or over-256-byte turn IDs.
+- [x] Run `scripts/test.sh --filter ActivityTests`; expect all activity tests pass.
+- [x] Commit the core and its tests.
 
 ### Task 2: Native Work projection and integration
 
