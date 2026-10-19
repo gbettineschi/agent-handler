@@ -50,6 +50,7 @@ public struct RequestStore: Sendable {
         scopes[scope]?.known = false
         for key in records.keys where key.scope == scope {
             if [.pending, .rejected].contains(records[key]!.view.state) { records[key]?.view.state = .unavailable }
+            if records[key]?.view.state == .sending { records[key]?.view.state = .uncertain }
         }
     }
     func isFresh(_ key: RequestKey) -> Bool {

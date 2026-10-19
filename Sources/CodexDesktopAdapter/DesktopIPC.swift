@@ -1,0 +1,267 @@
+// Adapted from Agent HUD Open, Apache-2.0. See THIRD_PARTY_NOTICES.md.
+import Darwin
+import Foundation
+
+/// Desktop IPC frames are a UInt32 little-endian length followed by UTF-8 JSON, rather than app-server JSON-RPC.
+public final class DesktopIPC {
+    public enum Failure: Error, Equatable, Sendable, CustomStringConvertible {
+        case invalidInput, unavailable, timedOut, protocolError
+        case rejected(String)
+        /// The submission may have been accepted. Do not automatically resend it.
+        case acceptanceUncertain
+
+        /// The case and the reason Desktop gave, if any, for a log.
+        public var description: String {
+            switch self {
+            case .invalidInput: "invalidInput: the request to Desktop was not well formed"
+            case .unavailable: "unavailable: Desktop's socket was missing or the connection closed"
+            case .timedOut: "timedOut: Desktop did not reply in time"
+            case .protocolError: "protocolError: Desktop's reply was not in the form expected"
+            case .rejected(let reason): "rejected: Desktop refused the request with \"\(reason)\""
+            case .acceptanceUncertain: "acceptanceUncertain: the request was sent but Desktop did not confirm it"
+            }
+        }
+    }
+
+    private var descriptor: Int32 = -1
+    private var deadline: TimeInterval
+    /// A snapshot carries the thread's whole history: tens of megabytes for a long thread.
+    private let maximumFrame = 128 * 1024 * 1024
+
+    public init(path: String, timeout: TimeInterval) throws {
+        guard timeout.isFinite, timeout > 0 else { throw Failure.invalidInput }
+        deadline = ProcessInfo.processInfo.systemUptime + timeout
+        var info = stat()
+        guard path.utf8.count < 104, stat(path, &info) == 0, info.st_uid == getuid(),
+              (info.st_mode & S_IFMT) == S_IFSOCK else {
+            throw Failure.unavailable
+        }
+        descriptor = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw Failure.unavailable }
+        do {
+            guard fcntl(descriptor, F_SETFL, O_NONBLOCK) == 0 else { throw Failure.unavailable }
+            var on: Int32 = 1
+            setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+            var address = sockaddr_un()
+            address.sun_family = sa_family_t(AF_UNIX)
+            _ = withUnsafeMutablePointer(to: &address.sun_path) { field in
+                field.withMemoryRebound(to: CChar.self, capacity: 104) { strlcpy($0, path, 104) }
+            }
+            let connected = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            if connected != 0 {
+                guard errno == EINPROGRESS else { throw Failure.unavailable }
+                try wait(for: Int16(POLLOUT))
+                var error: Int32 = 0, size = socklen_t(MemoryLayout<Int32>.size)
+                guard getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &error, &size) == 0, error == 0 else {
+                    throw Failure.unavailable
+                }
+            }
+            var peerUID: uid_t = 0, peerGID: gid_t = 0
+            guard getpeereid(descriptor, &peerUID, &peerGID) == 0, peerUID == getuid() else { throw Failure.unavailable }
+        } catch {
+            Darwin.close(descriptor)
+            throw error
+        }
+    }
+
+    public func close() { if descriptor >= 0 { Darwin.close(descriptor); descriptor = -1 } }
+    deinit { close() }
+
+    public func request(method: String, version: Int, source: String, target: String? = nil,
+                        params: [String: Any], didWrite: (() -> Void)? = nil) throws -> [String: Any] {
+        let requestID = UUID().uuidString.lowercased()
+        var message: [String: Any] = ["type": "request", "requestId": requestID, "sourceClientId": source,
+                                    "version": version, "method": method, "params": params,
+                                    "timeoutMs": max(1, Int(min(remaining * 1000, Double(Int32.max))))]
+        if let target { message["targetClientId"] = target }
+        try send(message, didWrite: didWrite)
+        while true {
+            let response = try receive()
+            if try answerDiscovery(response) { continue }
+            guard response["type"] as? String == "response", response["requestId"] as? String == requestID else { continue }
+            switch response["resultType"] as? String {
+            case "success": return response
+            case "error": throw Failure.rejected(response["error"] as? String ?? "unknown-ipc-error")
+            default: throw Failure.protocolError
+            }
+        }
+    }
+
+    public func conversationSnapshot(source: String, owner: String, threadID: String) throws -> [String: Any] {
+        try follow(true, source: source, owner: owner, threadID: threadID)
+        defer { try? follow(false, source: source, owner: owner, threadID: threadID) }
+        while true {
+            let message = try receive()
+            if try answerDiscovery(message) { continue }
+            guard message["type"] as? String == "broadcast",
+                  message["method"] as? String == "thread-stream-state-changed",
+                  message["sourceClientId"] as? String == owner,
+                  let params = message["params"] as? [String: Any],
+                  params["hostId"] as? String == "local", params["conversationId"] as? String == threadID else { continue }
+            guard message["version"] as? Int == 11,
+                  let change = params["change"] as? [String: Any] else { throw Failure.protocolError }
+            guard change["type"] as? String == "snapshot" else { continue }
+            guard let state = change["conversationState"] as? [String: Any] else { throw Failure.protocolError }
+            return state
+        }
+    }
+
+    /// The same snapshot, its frame parsed once. A reader that asks at every pass uses this one: building a Foundation
+    /// tree and converting it costs more than twice as much on a long thread.
+    public func conversationState(source: String, owner: String, threadID: String) throws -> JSONValue {
+        try follow(true, source: source, owner: owner, threadID: threadID)
+        defer { try? follow(false, source: source, owner: owner, threadID: threadID) }
+        while true {
+            let message = try JSONValue.parse(receiveFrame(), leavingOutStringsOver: 16_384)
+            guard message.objectValue != nil else { throw Failure.protocolError }
+            if try answerDiscovery(type: message["type"].stringValue, requestID: message["requestId"].stringValue) { continue }
+            let params = message["params"], change = params["change"]
+            guard message["type"].stringValue == "broadcast",
+                  message["method"].stringValue == "thread-stream-state-changed",
+                  message["sourceClientId"].stringValue == owner,
+                  params["hostId"].stringValue == "local", params["conversationId"].stringValue == threadID else { continue }
+            guard message["version"] == .integer(11), change.objectValue != nil else { throw Failure.protocolError }
+            guard change["type"].stringValue == "snapshot" else { continue }
+            let state = change["conversationState"]
+            guard state.objectValue != nil else { throw Failure.protocolError }
+            return state
+        }
+    }
+
+    /// Tells a thread's owner that this client follows it, or no longer does. A follower is sent the thread's whole
+    /// state and then each change to it; following again while following asks for the whole state once more.
+    public func follow(_ value: Bool, source: String, owner: String, threadID: String) throws {
+        try send(["type": "broadcast", "method": "thread-stream-following-changed", "version": 1,
+                  "sourceClientId": source, "targetClientIds": [owner],
+                  "params": ["hostId": "local", "conversationId": threadID, "following": value]])
+    }
+
+    // MARK: A connection that stays open
+
+    /// Gives the waits that follow their own time: a connection kept open has no one deadline for its whole life.
+    public func renew(timeout: TimeInterval) { deadline = ProcessInfo.processInfo.systemUptime + timeout }
+
+    /// Whether a message began to arrive within `seconds`. A closed connection throws.
+    public func waitForMessage(_ seconds: TimeInterval) throws -> Bool {
+        while true {
+            var entry = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let result = poll(&entry, 1, Int32(max(0, min(seconds * 1000, Double(Int32.max)))))
+            if result < 0, errno == EINTR { continue }
+            if result == 0 { return false }
+            guard result > 0, entry.revents & Int16(POLLIN) != 0 else { throw Failure.unavailable }
+            return true
+        }
+    }
+
+    /// The next message as its bytes, of at most `limit`, within the connection's current time.
+    public func message(limit: Int) throws -> Data { try receiveFrame(limit: limit) }
+
+    /// Sends a message without waiting for anything back; its answer, if it has one, arrives among the messages.
+    public func post(_ message: [String: Any]) throws { try send(message) }
+
+    /// Says that this client cannot take a request Desktop's hub offered to every client, when `message` is one.
+    public func declines(_ message: JSONValue) throws -> Bool {
+        try answerDiscovery(type: message["type"].stringValue, requestID: message["requestId"].stringValue)
+    }
+
+    private func answerDiscovery(_ message: [String: Any]) throws -> Bool {
+        try answerDiscovery(type: message["type"] as? String, requestID: message["requestId"] as? String)
+    }
+
+    private func answerDiscovery(type: String?, requestID: String?) throws -> Bool {
+        guard type == "client-discovery-request", let requestID else { return false }
+        try send(["type": "client-discovery-response", "requestId": requestID, "response": ["canHandle": false]])
+        return true
+    }
+
+    private var remaining: TimeInterval { deadline - ProcessInfo.processInfo.systemUptime }
+
+    private func send(_ message: [String: Any], didWrite: (() -> Void)? = nil) throws {
+        let payload = try JSONSerialization.data(withJSONObject: message)
+        guard payload.count <= maximumFrame else { throw Failure.protocolError }
+        var length = UInt32(payload.count).littleEndian
+        var bytes = withUnsafeBytes(of: &length) { Data($0) }
+        bytes.append(payload)
+        var offset = 0
+        while offset < bytes.count {
+            try wait(for: Int16(POLLOUT))
+            let count = bytes.withUnsafeBytes { Darwin.send(descriptor, $0.baseAddress!.advanced(by: offset), bytes.count - offset, 0) }
+            if count < 0, errno == EINTR || errno == EAGAIN { continue }
+            guard count > 0 else { throw Failure.unavailable }
+            if offset == 0 { didWrite?() }
+            offset += count
+        }
+    }
+
+    private func receive() throws -> [String: Any] {
+        guard let message = try JSONSerialization.jsonObject(with: receiveFrame(limit: 1024 * 1024)) as? [String: Any] else {
+            throw Failure.protocolError
+        }
+        return message
+    }
+
+    private func receiveFrame(limit: Int? = nil) throws -> Data {
+        let header = try read(4)
+        let length = header.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(as: UInt32.self)) }
+        guard length > 0, length <= min(limit ?? maximumFrame, maximumFrame) else { throw Failure.protocolError }
+        return try read(Int(length))
+    }
+
+    /// A message this long is read into memory mapped for it alone.
+    private static let mappedFrom = 1024 * 1024
+
+    private func read(_ count: Int) throws -> Data {
+        // A long thread's state is a hundred megabytes in one message. Memory the allocator frees after such a message
+        // stays counted as this process's (110 MB measured after one of 108 MB); a mapping goes back as it is released.
+        if count >= Self.mappedFrom { return try readMapped(count) }
+        var result = Data()
+        result.reserveCapacity(count)
+        while result.count < count {
+            try wait(for: Int16(POLLIN))
+            var bytes = [UInt8](repeating: 0, count: min(count - result.count, 64 * 1024))
+            let size = recv(descriptor, &bytes, bytes.count, 0)
+            if size < 0, errno == EINTR || errno == EAGAIN { continue }
+            guard size > 0 else { throw Failure.unavailable }
+            result.append(contentsOf: bytes.prefix(size))
+        }
+        return result
+    }
+
+    private func readMapped(_ count: Int) throws -> Data {
+        guard let memory = mmap(nil, count, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0), memory != MAP_FAILED else {
+            throw Failure.unavailable
+        }
+        var filled = 0
+        do {
+            while filled < count {
+                try wait(for: Int16(POLLIN))
+                let size = recv(descriptor, memory + filled, min(count - filled, 1024 * 1024), 0)
+                if size < 0, errno == EINTR || errno == EAGAIN { continue }
+                guard size > 0 else { throw Failure.unavailable }
+                filled += size
+            }
+        } catch {
+            munmap(memory, count)
+            throw error
+        }
+        return Data(bytesNoCopy: memory, count: count, deallocator: .unmap)
+    }
+
+    private func wait(for events: Int16) throws {
+        while true {
+            try Task.checkCancellation()
+            guard descriptor >= 0 else { throw Failure.unavailable }
+            guard remaining > 0 else { throw Failure.timedOut }
+            var entry = pollfd(fd: descriptor, events: events, revents: 0)
+            let result = poll(&entry, 1, Int32(min(remaining * 1000 + 1, Double(Int32.max))))
+            if result < 0, errno == EINTR { continue }
+            if result == 0 { throw Failure.timedOut }
+            guard result > 0, entry.revents & events != 0 else { throw Failure.unavailable }
+            return
+        }
+    }
+}
