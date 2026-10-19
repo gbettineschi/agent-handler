@@ -13,6 +13,35 @@ func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws 
 }
 
 struct DesktopAdapterTests {
+    // Retaining unrelated tool output used to push ordinary long conversations over the state cap.
+    @Test(arguments: [false, true]) func largeToolHistoryPreservesQuestionsAndPatches(canonical: Bool) async throws {
+        let tools: [[String: Any]] = (0..<900).map { index in
+            ["type": "commandExecution", "id": "tool-\(index)",
+             "output": ["blocks": [["text": String(repeating: "x", count: 10_000)]]]]
+        }
+        let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState(canonical: canonical, extraItems: tools)), fragmentSize: 65_536)
+        defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 2 }
+        let prefix: [JSONValue] = canonical
+            ? [.string("turnHistory"), .string("history"), .string("entitiesByKey"), .string("turn-key"), .string("items")]
+            : [.string("turns"), .integer(0), .string("items")]
+        server.change([
+            .object(["op": .string("replace"), "path": .array(prefix + [.integer(1), .string("output"), .string("blocks"), .integer(0), .string("text")]), "value": .string("Updated tool output")]),
+            .object(["op": .string("replace"), "path": .array(prefix + [.integer(0), .string("questions"), .integer(0), .string("title")]), "value": .string("Updated first?")])
+        ])
+        try await eventually { await core.snapshot().contains { $0.request.title == "Updated first?" && $0.state == .pending } }
+        let reply = #"<send_user_message_question_reply>[{"questionItemId":"[\"request_user_input_async\",\"message\",0]","question":"Updated first?","answer":"Yes"}]</send_user_message_question_reply>"#
+        server.change([.object(["op": .string("add"), "path": .array(prefix + [.string("-")]), "value": .object([
+            "type": .string("steeringUserMessage"), "status": .string("accepted"),
+            "input": .array([.object(["type": .string("text"), "text": .string(reply)])])
+        ])])])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 1 }
+        #expect(await core.snapshot().first { $0.state == .pending }?.request.title == "Second?")
+        #expect(server.follows == 1)
+        await adapter.stop()
+    }
     @Test func malformedQuestionStateRetainsCardsUntilValidRecovery() async throws {
         let valid = try JSONValue.parse(fixtureState())
         let server = try FixtureDesktopServer(state: valid); defer { server.stop() }

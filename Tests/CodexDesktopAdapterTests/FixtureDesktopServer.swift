@@ -25,6 +25,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
     private let acknowledges: Bool
     private let dropAnswer: Bool
     private let streamVersion: Int64
+    private let fragmentSize: Int
     private var received: [JSONValue] = []
     /// Setting the state sends it whole to whoever follows, as a new revision.
     var state: JSONValue {
@@ -83,11 +84,12 @@ final class FixtureDesktopServer: @unchecked Sendable {
         }
     }
 
-    init(state: JSONValue, acknowledges: Bool = true, dropAnswer: Bool = false, streamVersion: Int64 = 11) throws {
+    init(state: JSONValue, acknowledges: Bool = true, dropAnswer: Bool = false, streamVersion: Int64 = 11, fragmentSize: Int = 3) throws {
         fixtureState = state
         self.acknowledges = acknowledges
         self.dropAnswer = dropAnswer
         self.streamVersion = streamVersion
+        self.fragmentSize = max(1, fragmentSize)
         let folder = directory.appendingPathComponent("ipc")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let path = folder.appendingPathComponent("ipc.sock").path
@@ -218,7 +220,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
         var frame = withUnsafeBytes(of: &length) { Data($0) }
         frame.append(payload)
         // A reply and a change can be sent from two threads; a frame is never cut by another.
-        guard sending.withLock({ FixtureSocket.send(peer, frame) }) else { throw FixtureFailure.socket }
+        guard sending.withLock({ FixtureSocket.send(peer, frame, fragmentSize: fragmentSize) }) else { throw FixtureFailure.socket }
     }
 
     private func receive(_ peer: Int32) throws -> JSONValue {
@@ -245,10 +247,10 @@ final class FixtureDesktopServer: @unchecked Sendable {
 
 enum FixtureSocket {
     static func fits(_ path: String) -> Bool { path.utf8.count < 104 }
-    static func send(_ fd: Int32, _ bytes: Data) -> Bool {
+    static func send(_ fd: Int32, _ bytes: Data, fragmentSize: Int = 3) -> Bool {
         var offset = 0
         while offset < bytes.count {
-            let count = bytes.withUnsafeBytes { Darwin.send(fd, $0.baseAddress!.advanced(by: offset), min(3, bytes.count - offset), 0) }
+            let count = bytes.withUnsafeBytes { Darwin.send(fd, $0.baseAddress!.advanced(by: offset), min(fragmentSize, bytes.count - offset), 0) }
             if count < 0 && errno == EINTR { continue }
             guard count > 0 else { return false }
             offset += count

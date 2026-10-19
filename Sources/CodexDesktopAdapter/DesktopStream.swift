@@ -276,10 +276,12 @@ public final class DesktopStream: @unchecked Sendable {
                                 entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
                             }
                             if entry.state != nil && revision == entry.revision { break }
-                            guard let cost = retainedCost(change["conversationState"], replacing: thread) else {
+                            var state = change["conversationState"]
+                            DesktopProjection.compact(&state)
+                            guard let cost = retainedCost(state, replacing: thread) else {
                                 unfollow(thread); foreign.insert(thread); break
                             }
-                            entry.state = change["conversationState"]
+                            entry.state = state
                             entry.retainedCost = cost
                             entry.revision = revision
                             followed[thread] = entry
@@ -301,6 +303,7 @@ public final class DesktopStream: @unchecked Sendable {
                             } else if case .integer(let base) = change["baseRevision"], base == entry.revision,
                                       case .integer(let revision) = change["revision"], revision > base, let patches = change["patches"].arrayValue,
                                       (try? DesktopPatches.apply(patches, to: &state)) != nil {
+                                DesktopProjection.compact(&state)
                                 entry.state = state
                                 entry.revision = revision
                                 dirty = true

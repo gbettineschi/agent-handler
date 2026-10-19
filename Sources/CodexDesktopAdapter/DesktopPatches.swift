@@ -23,6 +23,11 @@ private extension JSONValue {
     mutating func change(at path: ArraySlice<JSONValue>, op: String, value: JSONValue) throws {
         let key = path[path.startIndex], rest = path.dropFirst()
         switch self {
+        case .discarded:
+            // Only explicitly projected, semantically irrelevant subtrees have this marker.
+            // A truncated question/answer uses .omitted and must still fail closed.
+            guard ["add", "replace", "remove"].contains(op) else { throw DesktopPatches.Unresolved() }
+            return
         case .object(var members):
             guard let name = key.stringValue ?? key.position.map(String.init) else { throw DesktopPatches.Unresolved() }
             // The members are held here alone while they change, so they change in place.

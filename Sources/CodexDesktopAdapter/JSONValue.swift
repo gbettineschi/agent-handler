@@ -4,6 +4,8 @@ import Foundation
 /// A Sendable JSON value that preserves integer precision.
 public enum JSONValue: Codable, Equatable, Sendable {
     case object([String: JSONValue]), array([JSONValue]), string(String), integer(Int64), number(Double), bool(Bool), null, omitted
+    /// A subtree deliberately excluded by the Desktop question projection, unlike truncated required text.
+    case discarded
 
     public init(from decoder: Decoder) throws {
         let value = try decoder.singleValueContainer()
@@ -25,7 +27,7 @@ public enum JSONValue: Codable, Equatable, Sendable {
         case .integer(let v): try value.encode(v)
         case .number(let v): try value.encode(v)
         case .bool(let v): try value.encode(v)
-        case .null, .omitted: try value.encodeNil()
+        case .null, .omitted, .discarded: try value.encodeNil()
         }
     }
 
