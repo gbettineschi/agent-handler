@@ -11,7 +11,7 @@ This is a development milestone, not universal agent interception.
 | Command, browser, app and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
 | Notch and menu fallback | Native AppKit/SwiftUI interface | Geometry tests and app launch pass. Visual/keyboard verification blocked by the locked Mac. |
-| Restart and uncertain delivery | Durable ledger and generation fencing | SQLite reopen and concurrency tests. Whole-app native restart and sleep/wake acceptance pending. |
+| Restart and uncertain delivery | Durable ledger and generation fencing | SQLite reopen, concurrency and SIGKILL subprocess checks at three committed ledger checkpoints. Whole-app native restart and sleep/wake acceptance pending. |
 
 ## Tested host
 
