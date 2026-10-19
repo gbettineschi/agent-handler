@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Testing
 import AgentHandlerCore
 @testable import ClaudeDesktopAdapter
@@ -28,6 +29,64 @@ final class AuditFixture {
 }
 
 struct ClaudeObserverTests {
+    @Test func nonRegularAuditFileIsRejectedBeforeWaitingForAWriter() throws {
+        let fixture = try AuditFixture(), file = try fixture.session()
+        try FileManager.default.removeItem(at: file)
+        #expect(mkfifo(file.path, 0o600) == 0)
+        // Release a regressed blocking open, so this test reports failure instead of hanging.
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(1)) {
+            let writer = open(file.path, O_WRONLY | O_NONBLOCK)
+            if writer >= 0 { close(writer) }
+        }
+        let started = ProcessInfo.processInfo.systemUptime
+        do {
+            _ = try ReadOnlyAuditFile(root: fixture.root, components: ["account", "org", "local_one", "audit.jsonl"])
+            Issue.record("A FIFO was accepted as an audit file")
+        } catch { }
+        #expect(ProcessInfo.processInfo.systemUptime - started < 0.5)
+    }
+
+    @Test func eofBaselineDiscardsTheRestOfAnUnfinishedRecord() async throws {
+        let fixture = try AuditFixture(), observer = fixture.observer()
+        let file = try fixture.session(data: Data("{\"unfinished\":".utf8))
+        await observer.poll(sourceInstance: "p")
+        // These bytes are the suffix of the pre-existing line, not a fresh init.
+        try fixture.append(file, [initLine("suffix"), resultLine("suffix-result")])
+        await observer.poll(sourceInstance: "p")
+        #expect(await observer.activity().isEmpty)
+        try fixture.append(file, [initLine("fresh"), resultLine("fresh-result")])
+        await observer.poll(sourceInstance: "p")
+        #expect(await observer.activity().first?.turnID == "fresh")
+        #expect(await observer.activity().first?.status == .completed)
+    }
+
+    @Test(arguments: ["audit", "metadata"])
+    func unavailableInputDiscardsPartialInitAndRequiresAnEofBaseline(input: String) async throws {
+        let fixture = try AuditFixture(), observer = fixture.observer(), file = try fixture.session()
+        await observer.poll(sourceInstance: "p")
+        try fixture.append(file, [initLine("before-gap")])
+        await observer.poll(sourceInstance: "p")
+        let partial = try initLine("split-across-gap"), half = partial.count / 2
+        try fixture.append(file, [Data(partial.prefix(half))], newline: false)
+        await observer.poll(sourceInstance: "p")
+        let target = input == "audit" ? file : file.deletingLastPathComponent().appendingPathExtension("json")
+        let saved = target.appendingPathExtension("saved")
+        try FileManager.default.moveItem(at: target, to: saved)
+        // A directory keeps discovery stable while a regular-file open fails.
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        await observer.poll(sourceInstance: "p")
+        await observer.poll(sourceInstance: "p") // Repeated failures must preserve the baseline requirement.
+        try FileManager.default.removeItem(at: target)
+        try FileManager.default.moveItem(at: saved, to: target)
+        try fixture.append(file, [Data(partial.dropFirst(half)), resultLine("gap-result")])
+        await observer.poll(sourceInstance: "p")
+        #expect(await observer.activity().first?.status == .unknown)
+        try fixture.append(file, [initLine("after-gap"), resultLine("after-gap-result")])
+        await observer.poll(sourceInstance: "p")
+        #expect(await observer.activity().first?.turnID == "after-gap")
+        #expect(await observer.activity().first?.status == .completed)
+    }
+
     @Test func existingHistoryIsBaselinedAndOnlyNewInitCanComplete() async throws {
         let fixture = try AuditFixture()
         let file = try fixture.session()

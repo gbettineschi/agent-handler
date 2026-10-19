@@ -2,7 +2,7 @@
 
 A small native macOS companion for agent questions, built around an independent request controller and a minimal notch interface.
 
-**Development build.** Asynchronous questions in existing Codex/ChatGPT Work Desktop conversations have passed native answer tests. A new approval adapter implements selected command, browser-origin and app confirmation contracts, with synthetic round-trip tests; native approval acceptance is still unverified. Live testing found an automatic-review metadata mismatch, so that case stays disabled. Regular Chat mode and Claude Desktop do not yet have verified adapters. The Desktop adapter uses private IPC and can require maintenance after host updates. See the [coverage audit](docs/surface-audit.md) and [verification record](docs/verification.md).
+**Development build.** Native Codex/ChatGPT Work questions and one real app-approval flow have passed. Shell and browser-origin approvals still need native acceptance tests. Work turn activity is tracked; regular ChatGPT Chat is deferred. A read-only Claude local-audit observer is implemented and fixture-tested, but a fresh native Claude turn remains unverified and Claude response delivery is not implemented. Cloud-only Claude chats without local audits are unsupported. The Desktop adapter uses private IPC and can require maintenance after host updates. See the [coverage audit](docs/surface-audit.md) and [verification record](docs/verification.md).
 
 ## Run locally
 
@@ -45,6 +45,6 @@ The [approved design](docs/superpowers/specs/2026-10-19-agent-handler-design.md)
 
 Tests bind temporary Unix sockets for synthetic hosts and never connect to a real agent. A restricted development sandbox may need permission to bind those fixture sockets. The test script supports the Command Line Tools Swift Testing framework layout and keeps compiler caches inside `.build`.
 
-After building tests, run `.build/debug/AgentHandlerDiagnostics --demo` for a synthetic controller check, or `--probe [--thread ID]` for a read-only native compatibility sample. The probe never submits an answer. See the [compatibility matrix](docs/compatibility.md) and [verification record](docs/verification.md) for measured results and pending manual checks.
+After building tests, run `.build/debug/AgentHandlerDiagnostics --demo` for a synthetic controller check, or `--probe [--thread ID]` for a read-only native compatibility sample. The probe never submits an answer. `--claude-probe` separately reports read-only local-audit activity counts; it baselines existing files and has no response transport. See the [compatibility matrix](docs/compatibility.md) and [verification record](docs/verification.md) for measured results and pending manual checks.
 
 See [third-party notices](THIRD_PARTY_NOTICES.md) for the narrow Agent HUD code adaptations and their Apache-2.0 license. This repository is private; original project code has no public license grant.

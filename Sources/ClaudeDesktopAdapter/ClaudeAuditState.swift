@@ -63,10 +63,21 @@ struct ClaudeAuditState: Sendable {
             guard active.phase == .running, let error = strictBool(record["is_error"]),
                   let reason = record["terminal_reason"] as? String, !reason.isEmpty else { invalidate(); return }
             if subtype == "success", !error, reason == "completed" { active.phase = .completed }
-            else if subtype?.hasPrefix("error_") == true, error {
-                if ["aborted_streaming", "aborted_tools"].contains(reason) { active.phase = .cancelled }
-                else if reason.hasPrefix("aborted_") { invalidate(); return }
-                else { active.phase = .failed }
+            else if error {
+                // Match known native schema pairs. A new error_* value is not evidence of termination.
+                switch (subtype, reason) {
+                case ("error_during_execution", "aborted_streaming"), ("error_during_execution", "aborted_tools"):
+                    active.phase = .cancelled
+                case ("error_during_execution", let reason) where [
+                    "blocking_limit", "rapid_refill_breaker", "prompt_too_long", "image_error", "model_error",
+                    "api_error", "malformed_tool_use_exhausted", "tool_deferred_unavailable", "turn_setup_failed"
+                ].contains(reason):
+                    active.phase = .failed
+                case ("error_max_turns", "max_turns"), ("error_max_budget_usd", "budget_exhausted"),
+                     ("error_max_structured_output_retries", "structured_output_retry_exhausted"):
+                    active.phase = .failed
+                default: invalidate(); return
+                }
             } else { invalidate(); return }
             active.permissions = []
         }

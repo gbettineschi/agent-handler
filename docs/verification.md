@@ -133,3 +133,23 @@ A focused independent review of `adddbdc7..ee42e38` found no blocking defects in
 The reviewer did not independently verify actual UI interaction, native response acceptance, real sleep/wake, whole-process termination at each crash boundary, separate-user peer rejection, future host compatibility or notarized distribution. The later subprocess tests cover the three ledger checkpoints described above. Host-side atomic targeting is unavailable in the private protocol, and neither the review nor the short performance sample proves exhaustive concurrency safety or a fixed RSS/battery bound. These remain limits, not passing results.
 
 A focused fresh-context review of completed-question handling identified premature withdrawal during empty reply-turn hydration and unsafe traversal across history gaps. The fixes passed isolated reproductions and now have permanent parser/socket regressions. The review also reproduced the accepted-receipt settlement race; its temporary minimal fix passed 14 focused tests, including epoch, body, closure and no-retry controls. The production fix retains those same fences. The reviewer did not operate the native host.
+
+
+## Claude audit review — 20 October 2026
+
+An independent reviewer reproduced four Important defects against `b69eff9`. Each was reproduced by a failing permanent regression before the production fix:
+
+| Finding | Fix and regression |
+| --- | --- |
+| EOF inside an unfinished line accepted a valid-looking suffix as a fresh init | Baselines discard through the next newline; `eofBaselineDiscardsTheRestOfAnUnfinishedRecord` |
+| Audit/metadata failures retained a partially read init across a gap | Drop the cursor and preserve a required EOF baseline through repeated failures; `unavailableInputDiscardsPartialInitAndRequiresAnEofBaseline` covers both input paths |
+| Unknown or contradictory error subtype/reason pairs became terminal states | Exact supported pairs only; `unknownAndContradictoryErrorSchemasRemainUnknown`. The placeholder `execution_error` fixture was replaced by the native `api_error` reason |
+| A FIFO could block before descriptor-based regular-file validation | Open leaf paths with `O_NONBLOCK`, retaining the regular-file check; `nonRegularAuditFileIsRejectedBeforeWaitingForAWriter` |
+
+The follow-up reviewer copied the current source and tests into its isolated checkout. All **24 test functions across four suites** passed, including its four independent reproductions. It found no remaining Critical/Important issue in the focused fixes. It did not verify a fresh Claude runtime, response transport or the UI.
+
+Executor checks: the complete **96-test / 16-suite** suite passed, the release bundle built, its strict ad-hoc signature verified, and `git diff --check` passed. The repeated native Claude probe showed zero current sessions and `responseTransport: false`, without replaying history.
+
+The previously running development app was stopped and the verified bundle relaunched. Computer use confirmed live Work activity counts and the separate `Claude local audits · 0 current · 0 need input · read-only` health line. No requests were pending. The panel was collapsed again. This verifies startup/integration, not a fresh Claude turn or real sleep/wake.
+
+The user confirmed that no paid Claude account is available at present. Fresh Cowork/Code observation and response tests remain unavailable; ordinary cloud Claude Chat and cloud-only sessions without compatible local audits remain unsupported. Claude question/approval response delivery is not implemented. Regular ChatGPT Chat remains deferred. No subscription or source permission setting was changed.

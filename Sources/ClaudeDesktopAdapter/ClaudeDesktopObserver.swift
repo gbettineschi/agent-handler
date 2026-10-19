@@ -13,6 +13,7 @@ public actor ClaudeDesktopObserver {
     private var source: String?
     private var began: TimeInterval = 0
     private var cursors: [AuditLocation: ClaudeAuditCursor] = [:]
+    private var requiresBaseline: Set<AuditLocation> = []
     private var selected: Set<AuditLocation> = []
     private var store = ActivityStore()
     private var epochs: [RequestScope: UUID] = [:]
@@ -29,7 +30,7 @@ public actor ClaudeDesktopObserver {
     public func health() -> String { message }
     public func stop() {
         for (scope, epoch) in epochs { store.invalidate(scope: scope, epoch: epoch) }
-        source = nil; cursors = [:]; selected = []; epochs = [:]
+        source = nil; cursors = [:]; requiresBaseline = []; selected = []; epochs = [:]
         message = "Claude local observation unavailable"
     }
     private func scope(_ location: AuditLocation) -> RequestScope {
@@ -39,12 +40,18 @@ public actor ClaudeDesktopObserver {
         let scope = scope(location)
         if let epoch = epochs[scope] { store.invalidate(scope: scope, epoch: epoch) }
     }
+    private func readFailed(_ location: AuditLocation) {
+        cursors.removeValue(forKey: location)
+        requiresBaseline.insert(location)
+        invalidate(location)
+    }
     public func poll(sourceInstance: String?) {
         guard let sourceInstance else { stop(); message = "Claude not running · local audit observation only"; return }
         do {
             let locations = try ClaudeAuditFiles.discover(root: root)
             if source != sourceInstance {
                 stop(); source = sourceInstance; began = now().timeIntervalSince1970
+                requiresBaseline = Set(locations)
                 for location in locations {
                     if let file = try? ReadOnlyAuditFile(root: root, components: location.audit) {
                         cursors[location] = try? ClaudeAuditCursor(file: file, atEnd: true)
@@ -54,6 +61,7 @@ public actor ClaudeDesktopObserver {
                 return
             }
             let present = Set(locations)
+            requiresBaseline.formIntersection(present)
             for location in cursors.keys where !present.contains(location) {
                 cursors.removeValue(forKey: location); selected.remove(location)
                 store.remove(scope: scope(location)); epochs.removeValue(forKey: scope(location))
@@ -66,10 +74,11 @@ public actor ClaudeDesktopObserver {
                     let file = try ReadOnlyAuditFile(root: root, components: location.audit), info = try file.info()
                     infos[location] = info
                     if cursors[location] == nil {
-                        cursors[location] = try ClaudeAuditCursor(file: file, atEnd: info.birth < began || info.birth <= 0)
+                        cursors[location] = try ClaudeAuditCursor(file: file,
+                            atEnd: requiresBaseline.contains(location) || info.birth < began || info.birth <= 0)
                     }
                     if let cursor = cursors[location], cursor.info != info || cursor.offset < info.size { changed.insert(location) }
-                } catch { faults += 1; cursors[location]?.state.invalidate(); invalidate(location) }
+                } catch { faults += 1; readFailed(location) }
             }
             let urgent = selected.filter { location in
                 store.views.contains { $0.id == scope(location) && [.running, .needsInput].contains($0.status) }
@@ -85,9 +94,10 @@ public actor ClaudeDesktopObserver {
             let limited = changed.subtracting(following)
             for location in selected.subtracting(following).union(limited) {
                 store.remove(scope: scope(location)); epochs.removeValue(forKey: scope(location))
-                if let file = try? ReadOnlyAuditFile(root: root, components: location.audit) {
-                    cursors[location] = try? ClaudeAuditCursor(file: file, atEnd: true)
-                }
+                do {
+                    let file = try ReadOnlyAuditFile(root: root, components: location.audit)
+                    cursors[location] = try ClaudeAuditCursor(file: file, atEnd: true)
+                } catch { faults += 1; readFailed(location) }
             }
             selected = following
             for location in wanted {
@@ -107,6 +117,7 @@ public actor ClaudeDesktopObserver {
                     }
                     let file = try ReadOnlyAuditFile(root: root, components: location.audit)
                     try cursor.read(file); cursors[location] = cursor
+                    requiresBaseline.remove(location)
                     let scope = scope(location)
                     if cursor.caughtUp, let value = cursor.state.observation {
                         let epoch = epochs[scope] ?? store.begin(scope: scope)
@@ -114,7 +125,7 @@ public actor ClaudeDesktopObserver {
                         store.observe(.init(scope: scope, epoch: epoch, revision: revision,
                             turnID: value.turnID, phase: value.phase, attention: value.attention))
                     } else { invalidate(location) }
-                } catch { faults += 1; cursors[location]?.state.invalidate(); invalidate(location) }
+                } catch { faults += 1; readFailed(location) }
             }
             // Records from a previous process remain unknown until fresh sources replace them.
             for view in store.views where store.views.count > 16 && !selected.contains(where: { scope($0) == view.id }) {
@@ -127,7 +138,7 @@ public actor ClaudeDesktopObserver {
         } catch {
             for (scope, epoch) in epochs { store.invalidate(scope: scope, epoch: epoch) }
             // A discovery gap discards active correlation; the next poll must baseline again.
-            source = nil; cursors = [:]; selected = []
+            source = nil; cursors = [:]; requiresBaseline = []; selected = []
             message = "Claude local audits unavailable or incompatible"
         }
     }

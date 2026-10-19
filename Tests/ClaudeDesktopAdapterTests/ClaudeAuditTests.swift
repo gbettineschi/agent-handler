@@ -20,7 +20,10 @@ struct ClaudeAuditTests {
     @Test func explicitInitAndTerminalResultsRemainDistinct() throws {
         let cases: [(String, String, Bool, ActivityPhase)] = [
             ("success", "completed", false, .completed),
-            ("error_during_execution", "execution_error", true, .failed),
+            ("error_during_execution", "api_error", true, .failed),
+            ("error_max_turns", "max_turns", true, .failed),
+            ("error_max_budget_usd", "budget_exhausted", true, .failed),
+            ("error_max_structured_output_retries", "structured_output_retry_exhausted", true, .failed),
             ("error_during_execution", "aborted_streaming", true, .cancelled),
             ("error_during_execution", "aborted_tools", true, .cancelled)
         ]
@@ -33,6 +36,26 @@ struct ClaudeAuditTests {
             #expect(state.observation?.turnID == "init-1")
             #expect(state.observation?.phase == phase)
             #expect(state.observation?.attention == .clear)
+        }
+    }
+
+    @Test func unknownAndContradictoryErrorSchemasRemainUnknown() throws {
+        let cases = [
+            ("error_future_pending", "future_retry_scheduled"),
+            ("error_future_pending", "aborted_streaming"),
+            ("error_during_execution", "completed"),
+            ("error_during_execution", "future_error"),
+            ("error_during_execution", "background_requested"),
+            ("error_during_execution", "hook_stopped"),
+            ("error_during_execution", "tool_deferred"),
+            ("error_during_execution", "max_turns"),
+            ("error_max_turns", "api_error"),
+            ("error_max_budget_usd", "structured_output_retry_exhausted")
+        ]
+        for (subtype, reason) in cases {
+            var state = ClaudeAuditState(); state.consume(try initLine())
+            state.consume(try auditLine("result", subtype, extra: ["is_error": true, "terminal_reason": reason]))
+            #expect(!state.isKnown, "Unrecognized terminal pair: \(subtype)/\(reason)")
         }
     }
 

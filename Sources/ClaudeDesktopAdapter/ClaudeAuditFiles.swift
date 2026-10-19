@@ -87,7 +87,7 @@ final class ReadOnlyAuditFile {
         }
         var parent = stat()
         guard fstat(current, &parent) == 0, parent.st_uid == getuid() else { throw ClaudeAuditFiles.Failure.unsafeFile }
-        let file = openat(current, components.last!, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        let file = openat(current, components.last!, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
         guard file >= 0 else { throw ClaudeAuditFiles.Failure.unavailable }
         var info = stat()
         guard fstat(file, &info) == 0, info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFREG, info.st_size >= 0 else {
@@ -135,6 +135,8 @@ struct ClaudeAuditCursor: Sendable {
     init(file: ReadOnlyAuditFile, atEnd: Bool) throws {
         info = try file.info(); offset = atEnd ? info.size : 0
         checkpoint = try file.checkpoint(at: offset)
+        // A baseline may land inside a record. Its remaining bytes cannot be a new event.
+        dropping = atEnd && offset > 0 && checkpoint.last != 10
     }
     var caughtUp: Bool { offset == info.size && fragment.isEmpty && !dropping }
     mutating func read(_ file: ReadOnlyAuditFile) throws {

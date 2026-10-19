@@ -34,10 +34,10 @@
 
 **Interfaces:** `ClaudeAuditState` exposes `observation: (turnID: String, phase: ActivityPhase, attention: ActivityAttention)?`, `isKnown: Bool`, `consume(_ line: Data)`, `invalidate()`. It keeps root init UUID/session ID, distinct permission UUIDs and bounded event fingerprints; no message text is retained.
 
-- [ ] Write tests for explicit init/success/error/interruption, no-init/mismatched/child result rejection, strict boolean/error fields, permission identity, duplicate UUID idempotence/conflicts and new-init recovery.
-- [ ] Run `scripts/test.sh --filter ClaudeAuditTests`; expect missing reducer failure.
-- [ ] Implement strict bounded JSON parsing and the reducer, with explicit terminal reason checks and native ordered-stream semantics.
-- [ ] Run `scripts/test.sh --filter ClaudeAuditTests`; expect all pass. Commit reducer and tests.
+- [x] Write tests for explicit init/success/error/interruption, no-init/mismatched/child result rejection, strict boolean/error fields, permission identity, duplicate UUID idempotence/conflicts and new-init recovery.
+- [x] Run `scripts/test.sh --filter ClaudeAuditTests`; expect missing reducer failure.
+- [x] Implement strict bounded JSON parsing and the reducer, with explicit terminal reason checks and native ordered-stream semantics.
+- [x] Run `scripts/test.sh --filter ClaudeAuditTests`; expect all pass. Commit reducer and tests.
 
 ### Task 2: Safe incremental local observer and application integration
 
@@ -45,9 +45,9 @@
 
 **Interfaces:** `ClaudeDesktopObserver(root: URL)` actor exposes `poll(sourceInstance: String?)`, `stop()`, `activity() -> [ActivityView]`, `health() -> String`. A changed sourceInstance invalidates and baselines; nil means unavailable. Files implement bounded source enumeration, read-only no-follow open, offset/checkpoint tracking and newline framing. Consumes Task 1 reducer and ActivityStore.
 
-- [ ] Write failing temporary-file integration tests for baseline/no replay, append/partial records, identity collision between accounts, rotation/truncation/checkpoint rewrite, symlink rejection, oversize recovery, source loss/restart and concurrent independent sessions. New files after baseline must be handled deterministically in fixtures without depending on filesystem clock resolution.
-- [ ] Run observer tests; expect missing observer failure.
-- [ ] Implement file safety and framing, conservative invalidation, limits and actor-owned source generations. Read metadata only for eligibility; parse logs only after new bytes.
-- [ ] Integrate into AppModel polling and sleep/wake/disable lifecycle, using Claude PID and launch date as instance metadata. Add `--claude-probe` diagnostics, reporting counts and limitations, with no message bodies or response path.
-- [ ] Run the full `scripts/test.sh`, `scripts/bundle.sh`, `codesign --verify --deep --strict 'dist/Agent Handler.app'` and `git diff --check`; expect success.
+- [x] Write failing temporary-file integration tests for baseline/no replay, append/partial records, identity collision between accounts, rotation/truncation/checkpoint rewrite, symlink rejection, oversize recovery, source loss/restart and concurrent independent sessions. New files after baseline must be handled deterministically in fixtures without depending on filesystem clock resolution.
+- [x] Run observer tests; expect missing observer failure.
+- [x] Implement file safety and framing, conservative invalidation, limits and actor-owned source generations. Read metadata only for eligibility; parse logs only after new bytes.
+- [x] Integrate into AppModel polling and sleep/wake/disable lifecycle, using Claude PID and launch date as instance metadata. Add `--claude-probe` diagnostics, reporting counts and limitations, with no message bodies or response path.
+- [x] Run the full `scripts/test.sh`, `scripts/bundle.sh`, `codesign --verify --deep --strict 'dist/Agent Handler.app'` and `git diff --check`; expect success.
 - [ ] Record the current Work probe and local Claude probe accurately, update compatibility/deferred Chat scope and competitor source explanation, commit, and request a fresh whole-change review. Fix material findings with regressions. Publish the private branch and verify CI if network remains available; do not claim a live Claude pass from fixtures or old files.
