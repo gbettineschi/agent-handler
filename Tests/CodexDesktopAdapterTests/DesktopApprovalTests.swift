@@ -220,8 +220,9 @@ extension DesktopApprovalTests {
         }
         #expect(server.answers.isEmpty)
         server.state = approvalState(reviewer: "auto_review")
-        try await eventually { await adapter.health().message.contains("Approval requests need the source app") }
+        try await eventually { await adapter.health().needsSourceApproval }
         #expect(await core.snapshot().allSatisfy { $0.state == .unavailable })
         await adapter.stop()
+        #expect(await adapter.health().needsSourceApproval == false)
     }
 }

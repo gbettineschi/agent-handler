@@ -18,4 +18,16 @@ struct PlacementTests {
         #expect(frame.contains(panel))
         #expect(panel.width > 0 && panel.height > 0)
     }
+
+    @Test func compactAndShortContentKeepTheSameTopAnchor() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let visible = CGRect(x: 0, y: 60, width: 1512, height: 890)
+        let compact = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: false)
+        let empty = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: true, contentHeight: 230)
+        #expect(compact.maxY == empty.maxY)
+        #expect(empty.height == 230)
+        #expect(visible.contains(empty))
+        let long = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: true, contentHeight: 2000)
+        #expect(visible.contains(long))
+    }
 }

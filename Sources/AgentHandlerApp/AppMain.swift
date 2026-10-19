@@ -22,13 +22,21 @@ import AppKit
             panel = NotchPanel(model: model)
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             self.item = item
-            item.button?.title = "AH"
+            let icon = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: "Agent Handler")
+            icon?.isTemplate = true
+            item.button?.image = icon
+            item.button?.toolTip = "Agent Handler"
             let menu = NSMenu()
             for (title, action, key) in [("Open Agent Handler", #selector(toggle), ""), ("Settings…", #selector(settings), ","), ("Quit Agent Handler", #selector(quit), "q")] {
                 let entry = NSMenuItem(title: title, action: action, keyEquivalent: key); entry.target = self; menu.addItem(entry)
             }
             item.menu = menu
-            model.attentionChanged = { [weak self, weak model] in self?.item?.button?.title = "AH \(model?.requests.count ?? 0)"; self?.panel?.refresh() }
+            model.attentionChanged = { [weak self, weak model] in
+                let count = model?.requests.count ?? 0
+                self?.item?.button?.title = count == 0 ? "" : " \(count)"
+                self?.item?.button?.setAccessibilityLabel("Agent Handler, \(count) requests need attention")
+                self?.panel?.refresh()
+            }
             model.placementChanged = { [weak self] in self?.panel?.refresh() }
             NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
             model.start()

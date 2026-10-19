@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 
 final class AttentionPanel: NSPanel {
     var dismiss: (() -> Void)?
@@ -8,31 +9,78 @@ final class AttentionPanel: NSPanel {
     override func performClose(_ sender: Any?) { dismiss?() }
 }
 
-@MainActor final class NotchPanel {
+@MainActor final class NotchPanel: NSObject {
     private let panel: AttentionPanel
     private let model: AppModel
-    private var expanded = false
+    private let presentation = PanelPresentation()
+    private var observations = Set<AnyCancellable>()
+    private var eventMonitors: [Any] = []
+    private var menuTracking = false
     init(model: AppModel) {
         self.model = model
         panel = AttentionPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        super.init()
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.level = .statusBar; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
+        panel.title = "Agent Handler"
+        NotificationCenter.default.addObserver(self, selector: #selector(menuBegan), name: NSMenu.didBeginTrackingNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(menuEnded), name: NSMenu.didEndTrackingNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(focusLost), name: NSWindow.didResignKeyNotification, object: panel)
         panel.dismiss = { [weak self] in self?.collapse() }
-        render()
-    }
-    func toggle() { expanded.toggle(); render(); if expanded { panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) } }
-    private func collapse() { guard expanded else { return }; expanded = false; render(); panel.resignKey() }
-    func showSettings() { expanded = true; model.showSettings = true; render(); panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    func refresh() { place() }
-    private func render() {
-        panel.contentView = NSHostingView(rootView: HandlerPanelView(model: model, expanded: expanded, toggle: { [weak self] in self?.toggle() }, collapse: { [weak self] in self?.collapse() }))
+        // A stable hosting tree preserves drafts while the window is collapsed.
+        panel.contentView = NSHostingView(rootView: HandlerPanelView(model: model, presentation: presentation,
+            toggle: { [weak self] in self?.toggle() }, collapse: { [weak self] in self?.collapse() }))
+        model.$showSettings.combineLatest(model.$requests, model.$selectedRequestID).sink { [weak self] _, _, _ in
+            Task { @MainActor [weak self] in self?.place() }
+        }.store(in: &observations)
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.dismissIfOutside() }
+        }) { eventMonitors.append(monitor) }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, event.window !== self.panel else { return }
+                self.dismissIfOutside()
+            }
+            return event
+        }) { eventMonitors.append(monitor) }
         place()
+    }
+    func toggle() {
+        if presentation.expanded { collapse() }
+        else { presentation.expanded = true; place(); panel.makeKeyAndOrderFront(nil) }
+    }
+    private func collapse() {
+        guard presentation.expanded else { return }
+        presentation.expanded = false; model.showSettings = false
+        panel.resignKey(); place()
+    }
+    func showSettings() { presentation.expanded = true; model.showSettings = true; place(); panel.makeKeyAndOrderFront(nil) }
+    func refresh() { place() }
+    private func dismissIfOutside() {
+        guard presentation.expanded, !menuTracking, !panel.frame.contains(NSEvent.mouseLocation) else { return }
+        collapse()
+    }
+    @objc private func menuBegan() { menuTracking = true }
+    @objc private func menuEnded() { menuTracking = false }
+    @objc private func focusLost() {
+        Task { @MainActor [weak self] in
+            guard let self, !self.menuTracking, !self.panel.isKeyWindow else { return }
+            self.collapse()
+        }
     }
     private func place() {
         let screen = NSScreen.screens.first { String(describing: $0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? "") == model.displayID } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        panel.setFrame(PanelPlacement.frame(screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top, expanded: expanded), display: true)
-        if expanded || screen.safeAreaInsets.top > 0 { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
+        let approval: Bool
+        if let content = model.displayedRequest?.request.content, case .approval = content { approval = true } else { approval = false }
+        let height: CGFloat = model.showSettings || approval ? 480 : (model.requests.isEmpty ? 260 : 400)
+        panel.setFrame(PanelPlacement.frame(screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top,
+                                           expanded: presentation.expanded, contentHeight: height), display: true)
+        panel.orderFrontRegardless()
     }
+}
+
+@MainActor final class PanelPresentation: ObservableObject {
+    @Published var expanded = false
 }

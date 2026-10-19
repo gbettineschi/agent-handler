@@ -6,7 +6,7 @@ public enum DesktopQuestions {
     public enum Failure: Error { case unsupported }
     // Discriminators observed on the pinned Desktop build. New kinds require a compatibility check.
     private static let knownItems: Set<String> = ["agentMessage", "automaticApprovalReview", "collabAgentToolCall",
-        "commandExecution", "contextCompaction", "fileChange", "forkedFromConversation", "mcpServerElicitation",
+        "commandExecution", "contextCompaction", "fileChange", "forkedFromConversation", "imageView", "mcpServerElicitation",
         "mcpToolCall", "modelChanged", "reasoning", "sleep", "steered", "steeringUserMessage", "subAgentActivity",
         "userMessage", "webSearch"]
     public static func decode(_ data: Data, threadID: String, owner: String, installation: String) throws -> [AttentionRequest] {

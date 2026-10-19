@@ -2,7 +2,12 @@ import Foundation
 import AgentHandlerCore
 
 public actor DesktopAdapter: ResponseTransport {
-    public struct Health: Sendable { public let followed: Int; public let known: Int; public let message: String }
+    public struct Health: Sendable {
+        public let followed: Int
+        public let known: Int
+        public let message: String
+        public let needsSourceApproval: Bool
+    }
     let stream: DesktopStream
     private let directory: URL
     private let controller: RequestController
@@ -53,7 +58,8 @@ public actor DesktopAdapter: ResponseTransport {
         let views = activityStore.views
         let activity = views.isEmpty ? "" : " · \(views.filter { $0.status == .running }.count) running · \(views.filter { $0.status == .needsInput }.count) need input · \(views.filter { $0.status == .completed }.count) completed · \(views.filter { $0.status == .failed }.count) failed · \(views.filter { $0.status == .cancelled }.count) cancelled · \(views.filter { $0.status == .unknown }.count) unknown"
         return .init(followed: wanted.count, known: known, message: message + activity +
-            (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"))
+            (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"),
+            needsSourceApproval: !unsupportedApprovals.isEmpty)
     }
     private func reconcile(token: UUID) async {
         guard token == generation else { return }

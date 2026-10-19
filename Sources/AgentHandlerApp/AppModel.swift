@@ -11,8 +11,15 @@ import ClaudeDesktopAdapter
     @Published var claudeActivities: [ActivityView] = []
     @Published var titles: [String: String] = [:]
     @Published var health = "Starting…"
+    @Published var connectedConversations = 0
+    @Published var selectedConversations = 0
+    @Published var connectionChecked = false
+    @Published var needsSourceApproval = false
+    @Published var trackingWarning: String?
     @Published var issue: String?
     @Published var showSettings = false
+    @Published var selectedRequestID: RequestKey?
+    var displayedRequest: RequestView? { requests.first { $0.id == selectedRequestID } ?? requests.first }
     @Published var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: "desktopEnabled"); Task { await reconfigure() } } }
     @Published var displayID: String { didSet { UserDefaults.standard.set(displayID, forKey: "displayID"); placementChanged?() } }
     @Published var extraThreads: String { didSet { UserDefaults.standard.set(extraThreads, forKey: "extraThreads"); lastDiscovery = 0 } }
@@ -88,6 +95,7 @@ import ClaudeDesktopAdapter
                 guard let self else { return }; self.sleeping = true
                 await self.adapter.stop(); await self.claude.stop()
                 self.activities = await self.adapter.activity(); self.claudeActivities = await self.claude.activity()
+                self.connectedConversations = 0; self.connectionChecked = false
                 self.health = "Paused during sleep"
             }
         })
@@ -100,6 +108,8 @@ import ClaudeDesktopAdapter
         guard !demo else { return }
         await adapter.stop(); await claude.stop()
         activities = await adapter.activity(); claudeActivities = await claude.activity(); lastDiscovery = 0
+        connectedConversations = 0; connectionChecked = false
+        needsSourceApproval = false
         await refreshDiscovery()
     }
     private func refreshDiscovery() async {
@@ -131,6 +141,9 @@ import ClaudeDesktopAdapter
             await adapter.start(threadIDs: Set(selected))
         }
         let state = await adapter.health()
+        trackingWarning = discoveryWarning
+        connectedConversations = state.known; selectedConversations = state.followed; connectionChecked = true
+        needsSourceApproval = state.needsSourceApproval
         activities = await adapter.activity()
         health = [discoveryWarning, state.message, await claude.health()].compactMap { $0 }.joined(separator: "\n")
         if await core.persistenceFailed { issue = "Responses disabled: delivery tracking is unavailable. Use the source app." }
@@ -149,10 +162,16 @@ import ClaudeDesktopAdapter
         let questions = [
             AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("first")), owner: "demo", title: "Which option should I use?",
                              content: .question(options: [.init(id: "simple", label: "Keep it simple"), .init(id: "details", label: "Show the details")], allowsText: true)),
-            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("second")), owner: "demo", title: "Anything else I should consider?", content: .question(options: [], allowsText: true))
+            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("second")), owner: "demo", title: "Anything else I should consider?", content: .question(options: [], allowsText: true)),
+            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("third")), owner: "demo",
+                title: "Run command?\n\n/usr/bin/printf 'This is a synthetic approval — no command will run.\\n'\n\nDirectory: /Users/example/Projects/agent-handler\n\nAllow a harmless connection check?",
+                content: .approval(choices: [.init(id: "accept", label: "Allow once"),
+                    .init(id: "rule", label: "Allow and save command rule: [\"/usr/bin/printf\",\"This is a synthetic approval — no command will run.\"]"),
+                    .init(id: "cancel", label: "Cancel turn")]))
         ]
         await core.observe(.init(scope: scope, epoch: epoch, revision: 1, requests: questions))
         health = "DEMO · synthetic requests, no agent connection"
+        titles[scope.conversation] = "Agent Handler interface test"
     }
     func setLogin(_ enabled: Bool) {
         do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }

@@ -19,6 +19,20 @@ func parseQuestions(_ data: Data) throws -> [AttentionRequest] {
 }
 
 struct DesktopQuestionTests {
+    @Test(arguments: [false, true]) func imageViewingCannotHideOrCreateQuestions(canonical: Bool) throws {
+        let image: [String: Any] = ["type": "imageView", "id": "image-tool",
+            "questions": [["title": "Not an agent question"]],
+            "content": [["type": "text", "text": "Not a native user answer"]]]
+        let data = try fixtureState(canonical: canonical, extraItems: [image])
+        let requests = try parseQuestions(data)
+        #expect(requests.map(\.title) == ["First?", "Second?"])
+        #expect(requests.map(\.key.nativeID) == [
+            .string("[\"request_user_input_async\",\"message\",0]"),
+            .string("[\"request_user_input_async\",\"message\",1]")])
+        let state = try JSONValue.parse(fixtureState(questions: [], canonical: canonical, extraItems: [image]))
+        let activity = try DesktopActivity.parse(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
+        #expect(activity.attention == .clear)
+    }
     @Test func incompleteHistoryCannotWithdrawOrResurrectQuestions() throws {
         var state = try JSONValue.parse(fixtureState())
         let empty = JSONValue.object(["turnId": .string("reply-turn"), "status": .string("inProgress"), "items": .array([])])
