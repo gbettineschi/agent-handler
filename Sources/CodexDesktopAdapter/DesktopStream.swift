@@ -235,7 +235,7 @@ public final class DesktopStream: @unchecked Sendable {
 
             if try connection.waitForMessage(dirty ? Self.pace : Self.idle) {
                 connection.renew(timeout: Self.messageTime)
-                let message = try JSONValue.parse(connection.message(limit: Self.messageLimit), leavingOutStringsOver: Self.stringLimit)
+                let message = try DesktopProjection.decodeFrame(connection.message(limit: Self.messageLimit))
                 connection.renew(timeout: 10)
                 if try connection.declines(message) { continue }
                 switch message["type"].stringValue {

@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current backend suite passes 105 test functions across 18 suites; native acceptance is listed separately below.
+This is a development milestone, not universal agent interception. The current backend suite passes 112 test functions across 19 suites; native acceptance is listed separately below.
 
 | Surface | Implemented | Evidence through 2026-10-20 |
 | --- | --- | --- |
@@ -12,8 +12,8 @@ This is a development milestone, not universal agent interception. The current b
 | Claude answer / approval delivery | Not implemented | Reading a permission log is not a live callback. The source app still handles responses; the new observer never creates answerable requests. CLI was signed out and Desktop showed Free during inspection. |
 | Answering in the source app | Reply envelopes withdraw matching requests | Two user replies in the source conversation cleared their previously visible Agent Handler cards. The computer tool cannot itself click the source app; cleanup was checked in Agent Handler. |
 | Multiple questions and conversations | Independent request identity and scoped state | Two simultaneous native questions tested; answering one retained the other. Multiple conversations remain core/socket-fixture tested. |
-| Codex command approvals | Adapter implemented; native acceptance unverified | Exact command/directory/reason, native choices including a bounded saved command rule, current owner and whole-request/settings fingerprint. A real request was captured on an automatic-review turn. The saved projectless granular preset disables shell/rule prompts; a later active native turn reports user/never/full access despite the composer label. See live-approval-setup.md. Native shell acceptance remains pending. |
-| Codex app approvals | Restricted adapter; live Clock round trip passed | The user allowed the waiting Clock access request through Agent Handler. The native computer tool resumed with Clock's interface, the card cleared, and the latest ledger entry closed. Complete user-reviewed settings and enabled MCP category required. Exact scope button/accepted receipt was not captured. |
+| Codex command approvals | Adapter implemented; native acceptance unverified | Exact command/directory/reason, native choices including a bounded saved command rule, current owner and whole-request/settings fingerprint. The earlier project-backed granular policy disabled shell/rule prompts. The resumed turn reports user/never/full access, so it cannot produce a shell approval. See live-approval-setup.md. |
+| Codex app approvals | Earlier live Clock round trip passed; post-fix live approval retest pending | Clock access resumed after an Agent Handler response and its durable entry closed. Later Chess/Dictionary cards were missed while the large-conversation stream could not decode; that connection failure is now fixed and a pending question survived restart and was answered through Agent Handler. Font Book produced zero native approval requests, so it does not verify post-fix Allow/Deny handling. |
 | Codex browser-origin approvals | Restricted adapter implemented; synthetic evidence | Known empty-form confirmations and native persistence scopes only. Controlled socket routing, deny/scope preservation, changed-request reconnect and SQLite reopen tests pass. The native navigation produced no card; browser acceptance remains pending. |
 | File diffs, network/additional permission grants, arbitrary forms and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
@@ -46,6 +46,7 @@ Only stream version 11 and recognized complete question shapes become actionable
 
 - At most 16 followed conversations and 128 unresolved requests.
 - Frames at most 128 MiB; supported content fields at most 16 KiB.
+- Native snapshots selectively discard unused turn/item metadata during parsing, before the 200,000 retained-node limit. Discarded-object duplicate-key validation has a separate 1 MiB temporary key budget. Patch values retain the raw node cap; a sufficiently large replacement patch can still require conservative resynchronization.
 - Conservative retained-tree accounting: 8 MiB per conversation, 64 MiB across the followed set, depth under 128. These are projection budgets, not exact RSS limits; receive buffers, parser temporaries and copy-on-write versions add transient memory.
 - Unused item and turn metadata fields are discarded before retained-budget admission. Identity, question content and accepted-answer envelopes stay intact; markers preserve paths for later native updates. Required oversized content is still unsupported.
 - Completed questions remain visible across consecutive native reply turns. A new ordinary prompt ends that earlier group. Gaps, partial item history, empty hydrating turns and unknown input types cannot establish withdrawal. Source-local Skip/dismiss state is not a verified protocol signal.

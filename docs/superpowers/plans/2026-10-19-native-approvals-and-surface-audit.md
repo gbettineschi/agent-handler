@@ -55,3 +55,11 @@ User scope: finish Codex shell/browser approvals and reconnect behavior before U
 - [x] Update live acceptance/setup notes with exact results. Real shell/browser decisions still require a native human-review request under eligible effective settings; do not change source policy from the companion or manufacture a native pass from fixtures.
 
 Follow-up result: the non-delivery regressions failed before the core fix and passed afterward. Full105/18 passed, release bundle/signature passed; independent focused review found no defects and passed its additional real-SQLite controls. Native own-app restart/question delivery/closure passed. Code/test commit `5336575` passed [macOS CI](https://github.com/gbettineschi/agent-handler/actions/runs/39336171264). Real shell/browser gates stay unchecked until the source host actually produces a human request.
+
+## Large-conversation regression follow-up — 20 October
+
+- [x] Capture the actual connection failure without transcript logging: a 33 MB native frame exhausts the raw 200,000-node budget before projection.
+- [x] Reproduce large unused histories/valid approvals failing, then move the existing snapshot projection into parsing. Keep retained-state, frame, depth and required-node limits; validate skipped objects with bounded duplicate-key scratch storage.
+- [x] Verify 112 tests/19 suites, independent parser review, release bundle/signature, and the exact live conversation's read-only connection. Remove temporary instrumentation.
+- [x] Leave a real question pending across app restart, answer through Agent Handler and observe exact native arrival, withdrawal and ledger closure.
+- [ ] Verify a fresh eligible app Allow/Deny request after this fix. Font Book needed no approval; resumed native settings are user/never/full access. Shell/browser gates remain separately pending.

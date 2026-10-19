@@ -4,6 +4,8 @@ A small native macOS companion for agent questions, built around an independent 
 
 **Development build.** Native Codex/ChatGPT Work questions and one real app-approval flow have passed. Shell and browser-origin approvals still need native acceptance tests. Work turn activity is tracked; regular ChatGPT Chat is deferred. A read-only Claude local-audit observer is implemented and fixture-tested, but a fresh native Claude turn remains unverified and Claude response delivery is not implemented. Cloud-only Claude chats without local audits are unsupported. The Desktop adapter uses private IPC and can require maintenance after host updates. See the [coverage audit](docs/surface-audit.md) and [verification record](docs/verification.md).
 
+The large-conversation disconnect is fixed: unused snapshot data is discarded during decoding rather than after exhausting the parser's node limit. The full 112-test suite passes, and a real pending question was recovered across app restart, answered through Agent Handler, and cleared. A fresh eligible app approval still needs its post-fix live check.
+
 ## Run locally
 
 Requires macOS 14+ and a Swift 6 toolchain. No package downloads or API keys are needed.

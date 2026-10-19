@@ -60,6 +60,19 @@ public enum JSONValue: Codable, Equatable, Sendable {
         }
     }
 
+    /// Decode a bounded native frame while dropping only fields already excluded by DesktopProjection.
+    /// The node allowance bounds retained values; skipped JSON is validated without building its tree.
+    static func parseDesktopFrame(_ data: Data) throws -> Self {
+        guard data.count <= 128 * 1024 * 1024 else { throw JSONParser.Malformed() }
+        return try data.withUnsafeBytes { buffer in
+            var parser = JSONParser(bytes: buffer.bindMemory(to: UInt8.self), stringLimit: 16_384)
+            let value = try parser.value(depth: 0, context: .frame)
+            parser.skipSpace()
+            guard parser.index == parser.bytes.count else { throw JSONParser.Malformed() }
+            return value
+        }
+    }
+
     public static func from<T: Encodable>(_ value: T) throws -> Self {
         try parse(RecordCoding.encoder().encode(value))
     }
@@ -81,15 +94,22 @@ private struct JSONParser {
     var stringLimit: Int?
     var index = 0
     var remainingNodes = 200_000
+    // Duplicate-key validation in discarded objects needs keys, but never their values.
+    // Bound that temporary storage across the active recursion stack as well.
+    var remainingScratch = 1024 * 1024
 
     mutating func skipSpace() {
         while index < bytes.count, bytes[index] == 0x20 || bytes[index] == 0x0A || bytes[index] == 0x0D || bytes[index] == 0x09 { index += 1 }
     }
 
-    mutating func value(depth: Int) throws -> JSONValue {
+    mutating func value(depth: Int, context: DesktopProjection.Context = .raw) throws -> JSONValue {
         remainingNodes -= 1
         skipSpace()
         guard remainingNodes >= 0, index < bytes.count, depth < 128 else { throw Malformed() }
+        if context == .discarded {
+            try skipValue(depth: depth)
+            return .discarded
+        }
         switch bytes[index] {
         case UInt8(ascii: "{"):
             index += 1
@@ -105,7 +125,7 @@ private struct JSONParser {
                 skipSpace()
                 guard index < bytes.count, bytes[index] == UInt8(ascii: ":") else { throw Malformed() }
                 index += 1
-                let member = try value(depth: depth + 1)
+                let member = try value(depth: depth + 1, context: context.member(key))
                 if object.index(forKey: key) == nil { object[key] = member }
                 skipSpace()
                 guard index < bytes.count else { throw Malformed() }
@@ -120,7 +140,7 @@ private struct JSONParser {
             skipSpace()
             if index < bytes.count, bytes[index] == UInt8(ascii: "]") { index += 1; return .array(array) }
             while true {
-                array.append(try value(depth: depth + 1))
+                array.append(try value(depth: depth + 1, context: context.element))
                 skipSpace()
                 guard index < bytes.count else { throw Malformed() }
                 if bytes[index] == UInt8(ascii: ",") { index += 1; continue }
@@ -138,6 +158,59 @@ private struct JSONParser {
         case UInt8(ascii: "f"): try literal("false"); return .bool(false)
         case UInt8(ascii: "n"): try literal("null"); return .null
         default: return try number()
+        }
+    }
+
+    /// Consume irrelevant JSON without spending retained-node capacity or allocating value containers.
+    /// Duplicate keys, key lengths, nesting and finite numbers remain checked. Strings
+    /// retain the existing oversized-string omission policy; other syntax is validated.
+    mutating func skipValue(depth: Int) throws {
+        skipSpace()
+        guard depth < 128, index < bytes.count else { throw Malformed() }
+        switch bytes[index] {
+        case UInt8(ascii: "{"):
+            index += 1
+            var keys: Set<String> = []
+            var scratch = 0
+            defer { remainingScratch += scratch }
+            skipSpace()
+            if index < bytes.count, bytes[index] == UInt8(ascii: "}") { index += 1; return }
+            while true {
+                skipSpace()
+                guard index < bytes.count, bytes[index] == UInt8(ascii: "\""),
+                      let end = closingQuote(), end - index <= 16_384 else { throw Malformed() }
+                let key = try string(), cost = key.utf8.count + 64
+                guard cost <= remainingScratch, keys.insert(key).inserted else { throw Malformed() }
+                remainingScratch -= cost; scratch += cost
+                skipSpace()
+                guard index < bytes.count, bytes[index] == UInt8(ascii: ":") else { throw Malformed() }
+                index += 1
+                try skipValue(depth: depth + 1)
+                skipSpace()
+                guard index < bytes.count else { throw Malformed() }
+                if bytes[index] == UInt8(ascii: ",") { index += 1; continue }
+                guard bytes[index] == UInt8(ascii: "}") else { throw Malformed() }
+                index += 1; return
+            }
+        case UInt8(ascii: "["):
+            index += 1
+            skipSpace()
+            if index < bytes.count, bytes[index] == UInt8(ascii: "]") { index += 1; return }
+            while true {
+                try skipValue(depth: depth + 1)
+                skipSpace()
+                guard index < bytes.count else { throw Malformed() }
+                if bytes[index] == UInt8(ascii: ",") { index += 1; continue }
+                guard bytes[index] == UInt8(ascii: "]") else { throw Malformed() }
+                index += 1; return
+            }
+        case UInt8(ascii: "\""):
+            if let stringLimit, let close = closingQuote(), close - index - 1 > stringLimit { index = close + 1 }
+            else { _ = try string() }
+        case UInt8(ascii: "t"): try literal("true")
+        case UInt8(ascii: "f"): try literal("false")
+        case UInt8(ascii: "n"): try literal("null")
+        default: _ = try number()
         }
     }
 

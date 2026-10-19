@@ -116,7 +116,7 @@ public final class DesktopIPC {
         try follow(true, source: source, owner: owner, threadID: threadID)
         defer { try? follow(false, source: source, owner: owner, threadID: threadID) }
         while true {
-            let message = try JSONValue.parse(receiveFrame(), leavingOutStringsOver: 16_384)
+            let message = try DesktopProjection.decodeFrame(receiveFrame())
             guard message.objectValue != nil else { throw Failure.protocolError }
             if try answerDiscovery(type: message["type"].stringValue, requestID: message["requestId"].stringValue) { continue }
             let params = message["params"], change = params["change"]
