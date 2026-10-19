@@ -2,7 +2,7 @@
 
 ## Automated checks
 
-On 2026-10-19, **45 tests across 11 suites passed locally and in macOS CI** using `scripts/test.sh`. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
+On 2026-10-19, **51 tests across 11 suites passed locally** using `scripts/test.sh`. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
 
 Coverage includes independent IDs, integer/string distinction, duplicate submissions, changed content, stale generations/revisions, scoped withdrawal, durable reservations, restart uncertainty, lost/mismatched receipts, owner changes, pre-send cancellation, revision gaps, frame fragmentation/limits, unknown stream versions, metadata discovery and panel geometry. Storage failure and Desktop's unset metadata flag were reproduced as failing regressions before fixing them.
 
@@ -24,13 +24,27 @@ After the Mac was unlocked, computer-use tests passed for demo keyboard text ent
 
 The user explicitly delegated harmless native test answers to computer use. Two labeled test questions appeared together in Agent Handler. An option was selected and sent through its UI; the answer arrived in the source conversation and the second question remained. A fresh diagnostic controller with an empty in-memory ledger independently saw exactly one native pending question. Agent Handler was restarted, recovered that question, and submitted a typed free-text answer through its UI. That reply also arrived in the source conversation, the panel cleared, and a fresh native probe reported zero pending questions. The diagnostics never submitted answers.
 
-Direct source-app UI interaction was blocked by the computer tool's app-access restriction. The source-app-click acceptance check is therefore still pending; the native answer envelopes and their removal from fresh observations were verified through the above Agent Handler submissions.
+Direct source-app UI interaction was blocked by the computer tool's app-access restriction. Later, the user answered two visible question cards in the source conversation; Agent Handler then showed “Nothing needs your attention”. This verifies user-driven source-answer cleanup, without claiming that the computer tool clicked the source app. The × button was clicked successfully, Escape was checked, and collapsed launch was verified.
 
 ## Long-conversation regression
 
 Live testing exposed an overly broad retained projection: the current conversation occupied about 10.2 MB under the accounting formula, exceeding the 8 MiB per-conversation limit even though its active turn used about 0.7 MB. The stream rejected it before questions reached the controller.
 
 `DesktopProjection` now retains item identity, questions and native answer envelopes while marking unrelated item fields as discarded. Nested patches into those deliberately discarded branches are ignored; required fields omitted because of size retain a distinct marker and still fail closed. Array positions, history ordering, revision checks and the 8 MiB limit are unchanged. Snapshots and patch replacements are compacted before budget admission. The regression first failed for both history formats, then passed with large tool output, a nested output patch, a changed question, and an accepted native answer. The previously rejected live conversation then became compatible and passed both answer tests.
+
+## Completed-turn questions and reply confirmation
+
+The user's separate Blue/Green screenshot exposed an actual missed case: a question can remain open after its generating turn completes. A read-only native snapshot contained one completed turn and one unanswered question, while the previous parser returned no requests. The parser now follows a complete, contiguous latest question group through native answer-only turns. Empty hydrating turns, incomplete item pagination, multiple history islands and unknown user-input kinds invalidate the scope instead of withdrawing requests. A temporal socket regression checks pending → unavailable → pending for the unanswered sibling.
+
+The installed host's native submission code uses steer for a running turn and start-turn for a completed one. The adapter now mirrors that distinction, inheriting settings on start instead of rebuilding the permission/model configuration. Synthetic socket tests verify both acknowledged and lost-receipt paths and the exact outbound method/version.
+
+In the live completed-turn test, Agent Handler displayed Blue/Green; computer use selected Blue and sent it. A fresh native observation then showed a second turn, the accepted native answer envelope, and zero pending questions. The panel briefly showed uncertain delivery. The exact native receipt was not captured, so this does not verify clean receipt settlement for that path.
+
+Investigation independently reproduced a controller race: temporary invalidation changed sending to uncertain, and a later valid accepted receipt updated the ledger but could not settle the UI. A failing regression reproduced this and now passes. Accepted receipts may settle the same uncertain request only within the same epoch and fingerprint; changed requests, new owners/epochs and closed cards remain fenced. This explains a possible cause of the live symptom, not a proven diagnosis of its exact receipt. A brief uncertain indication before the receipt arrives remains possible. No test answer was resent, and no durable ledger entry was removed.
+
+The separate test's local metadata identifies the Work Desktop originator. Regular Chat mode has not been independently verified. Claude Desktop 2.42304.2 rendered a native question in its Chat and Cowork interface, but there is no Claude adapter in this build. Displaying that Claude question is not evidence of Agent Handler integration.
+
+Further live inspection also found large `hookRuns` turn metadata exceeding the same retained-state budget. Turn projection now preserves turn identity, status, items and pagination while discarding unused metadata. Both history formats pass the large-metadata and nested-patch regression; the live Work conversation was retained at approximately 1.8 MB under the unchanged 8 MiB limit.
 
 ## Process measurement
 
@@ -40,12 +54,14 @@ After the retention fix, another 30.02-second live sample used 0.17 CPU seconds 
 
 ## Acceptance still required
 
-1. Click an answer directly in the source app and verify that the corresponding Agent Handler card clears.
+1. Complete a fresh completed-turn question and confirm the native start-turn receipt settles cleanly after the controller fix. The previous answer reached the source, but its exact receipt was not captured.
 2. Disconnect or quit the host, then reconnect. Pending cards should disable and recover only from fresh authoritative state.
 3. Restart the whole app after an uncertain native send; verify that request cannot be resent. Ledger subprocess crash checks and synthetic uncertain-delivery tests already pass.
 4. Real sleep/wake, multiple displays, menu fallback, full keyboard navigation and focus behavior while another app is active.
 
 Synthetic tests are not proof that these live interaction checks passed. Native approval support is outside this milestone.
+
+5. Independently exercise regular Chat mode and design/test a separate Claude Desktop adapter. Neither is covered by the Work-mode results.
 
 ## Independent review
 
@@ -64,3 +80,5 @@ The Minor discovery-guidance finding has been fixed: metadata errors remain visi
 A focused independent review of `adddbdc7..ee42e38` found no blocking defects in the retention fix. Its isolated harness passed 22 mutation/failure cases across both history formats, including discarded-branch deletion/re-addition, item/array/root replacement, shifted array positions and malformed required fields. These cases were adapted into permanent `DesktopProjectionTests`; the reviewer did not operate the native host or perform UI testing.
 
 The reviewer did not independently verify actual UI interaction, native response acceptance, real sleep/wake, whole-process termination at each crash boundary, separate-user peer rejection, future host compatibility or notarized distribution. The later subprocess tests cover the three ledger checkpoints described above. Host-side atomic targeting is unavailable in the private protocol, and neither the review nor the short performance sample proves exhaustive concurrency safety or a fixed RSS/battery bound. These remain limits, not passing results.
+
+A focused fresh-context review of completed-question handling identified premature withdrawal during empty reply-turn hydration and unsafe traversal across history gaps. The fixes passed isolated reproductions and now have permanent parser/socket regressions. The review also reproduced the accepted-receipt settlement race; its temporary minimal fix passed 14 focused tests, including epoch, body, closure and no-retry controls. The production fix retains those same fences. The reviewer did not operate the native host.

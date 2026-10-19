@@ -130,10 +130,6 @@ import CodexDesktopAdapter
         await core.observe(.init(scope: scope, epoch: epoch, revision: 1, requests: questions))
         health = "DEMO · synthetic requests, no agent connection"
     }
-    func openSource() {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex") else { issue = "ChatGPT/Codex Desktop could not be found."; return }
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
-    }
     func setLogin(_ enabled: Bool) {
         do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
         catch { issue = "Launch at login is unavailable for this development build." }

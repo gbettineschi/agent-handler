@@ -23,6 +23,24 @@ struct ImmediateTransport: ResponseTransport {
 }
 
 struct ControllerTests {
+    @Test func acceptedReceiptSettlesTemporarilyUnavailableRequest() async throws {
+        let ledger = MemoryLedger(), wire = GateTransport(), q = question()
+        let core = RequestController(ledger: ledger)
+        let epoch = await core.begin(scope: scope)
+        await core.observe(observation([q], epoch: epoch))
+        let sending = Task { try await core.respond(key: q.key, fingerprint: q.fingerprint, answer: .text("Yes"), using: wire) }
+        try await wire.waitForStart()
+        await core.invalidate(scope: scope, epoch: epoch)
+        #expect(await core.snapshot().first?.state == .uncertain)
+        await wire.finish(.accepted)
+        try await sending.value
+        #expect(await core.snapshot().first?.state == .accepted)
+        #expect(try ledger.status(for: q.key)?.status == .accepted)
+        await #expect(throws: ResponseError.self) {
+            try await core.respond(key: q.key, fingerprint: q.fingerprint, answer: .text("Yes"), using: wire)
+        }
+        #expect(await wire.count == 1)
+    }
     @Test func persistenceFailureKeepsFutureQuestionsDisabled() async throws {
         let ledger = FailsFirstStatusLedger(), core = RequestController(ledger: ledger)
         let epoch = await core.begin(scope: scope), q = question()

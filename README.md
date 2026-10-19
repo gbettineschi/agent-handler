@@ -2,7 +2,7 @@
 
 A small native macOS companion for agent questions, built around an independent request controller and a minimal notch interface.
 
-**Development build.** The first live adapter targets asynchronous questions in existing Codex/ChatGPT Desktop conversations. Approval choices are covered by the core and fixture tests; live command, browser, app and Claude approvals are not implemented yet. The Desktop adapter uses private IPC and can require maintenance after host updates.
+**Development build.** The first live adapter targets asynchronous questions in existing Codex/ChatGPT Work Desktop conversations. Approval choices are covered by the core and fixture tests; live command, browser, app and Claude approvals are not implemented yet. Regular Chat mode and Claude Desktop are not verified integrations. The Desktop adapter uses private IPC and can require maintenance after host updates.
 
 ## Run locally
 
@@ -17,10 +17,10 @@ open "dist/Agent Handler.app" --args --demo
 Quit the demo from the **AH** menu before starting the live connection:
 
 ```sh
-open "dist/Agent Handler.app" --args --show
+open "dist/Agent Handler.app"
 ```
 
-The app remains available through the **AH** menu. On a notched display a small indicator expands into the request queue; other displays use the menu and floating panel. It does not bring the panel forward for each incoming question. Settings select a display, enable the Desktop connection and accept additional conversation IDs.
+The app starts collapsed and remains available through the **AH** menu. On a notched display a small indicator expands into the request queue; other displays use the menu and floating panel. Close the panel with its × button or Escape; pending requests remain in the queue. It does not bring the panel forward for each incoming question. Settings select a display, enable the Desktop connection and accept additional conversation IDs. Use `--show` only when you explicitly want an expanded launch.
 
 The live adapter observes at most 16 recent local conversations, prioritizing already-pending requests and explicitly selected IDs. Local metadata supplies candidates; only a verified owner stream makes a question actionable. Discovery uses `state_5.sqlite`; an unsupported metadata schema requires explicit IDs until its adapter is updated. `CODEX_HOME` is honored when supplied to the process, otherwise `~/.codex` is used.
 

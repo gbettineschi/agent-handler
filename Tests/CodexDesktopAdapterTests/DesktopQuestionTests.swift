@@ -9,7 +9,8 @@ func fixtureState(questions: [[String: Any]] = [["title": "First?", "options": [
         [["type": "agentMessage", "id": "message", "questions": questions]] + extraItems]
     let state: [String: Any] = canonical
         ? ["requests": [], "turns": [], "turnHistory": ["kind": "canonical", "history": [
-            "islands": [["entries": [["value": "turn-key"]]]], "entitiesByKey": ["turn-key": turn]]]]
+            "islands": [["entries": [["value": "turn-key"]], "newerBoundary": ["status": "exhausted"],
+                         "olderBoundary": ["status": "exhausted"]]], "entitiesByKey": ["turn-key": turn]]]]
         : ["requests": [], "turns": [turn]]
     return try JSONSerialization.data(withJSONObject: state)
 }
@@ -18,6 +19,34 @@ func parseQuestions(_ data: Data) throws -> [AttentionRequest] {
 }
 
 struct DesktopQuestionTests {
+    @Test func incompleteHistoryCannotWithdrawOrResurrectQuestions() throws {
+        var state = try JSONValue.parse(fixtureState())
+        let empty = JSONValue.object(["turnId": .string("reply-turn"), "status": .string("inProgress"), "items": .array([])])
+        var turns = state["turns"].arrayValue!; var old = turns[0].objectValue!; old["status"] = .string("completed")
+        turns = [.object(old), empty]; state = .object(["turns": .array(turns)])
+        #expect(throws: (any Error).self) { _ = try DesktopQuestions.parse(state: state, threadID: "thread", owner: "o", installation: "i") }
+        let unknownContent = JSONValue.array([.object(["type": .string("futureUserInput")])])
+        let unknown = JSONValue.object(["turnId": .string("reply-turn"), "status": .string("completed"),
+            "items": .array([.object(["type": .string("userMessage"), "content": unknownContent])])])
+        let future = JSONValue.object(["turns": .array([.object(old), unknown])])
+        #expect(throws: (any Error).self) { _ = try DesktopQuestions.parse(state: future, threadID: "thread", owner: "o", installation: "i") }
+        var partial = try JSONValue.parse(fixtureState())
+        try DesktopPatches.apply([.object(["op": .string("add"), "path": .array([.string("turns"), .integer(0), .string("itemsPagination")]),
+            "value": .object(["hasLoadedOldest": .bool(false)])])], to: &partial)
+        DesktopProjection.compact(&partial)
+        #expect(throws: (any Error).self) { _ = try DesktopQuestions.parse(state: partial, threadID: "thread", owner: "o", installation: "i") }
+        var gap = try JSONValue.parse(fixtureState(canonical: true))
+        // Distinct keys ensure this fails because of the history gap, not duplicate IDs.
+        let earlier = JSONValue.object(["turnId": .string("earlier-turn"), "status": .string("completed"), "items": .array([])])
+        let island = JSONValue.object(["entries": .array([.object(["value": .string("earlier-key")])]),
+            "newerBoundary": .object(["status": .string("available")]),
+            "olderBoundary": .object(["status": .string("exhausted")])])
+        try DesktopPatches.apply([
+            .object(["op": .string("add"), "path": .array([.string("turnHistory"), .string("history"), .string("entitiesByKey"), .string("earlier-key")]), "value": earlier]),
+            .object(["op": .string("add"), "path": .array([.string("turnHistory"), .string("history"), .string("islands"), .integer(0)]), "value": island])
+        ], to: &gap)
+        #expect(throws: (any Error).self) { _ = try DesktopQuestions.parse(state: gap, threadID: "thread", owner: "o", installation: "i") }
+    }
     @Test func malformedTurnStoresCannotEstablishWithdrawal() throws {
         let values = [
             #"{"turns":[{}]}"#,
@@ -54,9 +83,28 @@ struct DesktopQuestionTests {
         }
         #expect(throws: (any Error).self) { _ = try parseQuestions(Data("{}".utf8)) }
     }
-    @Test func completionClosesQuestions() throws {
+    @Test func completionKeepsOutstandingQuestions() throws {
         let data = try fixtureState()
         let text = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "inProgress", with: "completed")
-        #expect(try parseQuestions(Data(text.utf8)).isEmpty)
+        #expect(try parseQuestions(Data(text.utf8)).count == 2)
+        for status in ["interrupted", "failed"] {
+            #expect(try parseQuestions(Data(text.replacingOccurrences(of: "completed", with: status).utf8)).isEmpty)
+        }
+    }
+    @Test func laterReplyRetainsSiblingButNewPromptEndsOldQuestions() throws {
+        let first = try JSONValue.parse(fixtureState())["turns"].arrayValue![0]
+        var original = first.objectValue!; original["status"] = .string("completed")
+        let reply = #"<send_user_message_question_reply>[{"questionItemId":"[\"request_user_input_async\",\"message\",0]","question":"First?","answer":"Yes"}]</send_user_message_question_reply>"#
+        func following(_ text: String) -> JSONValue {
+            let content = JSONValue.array([.object(["type": .string("text"), "text": .string(text)])])
+            return .object(["turnId": .string("reply-turn"), "status": .string("completed"),
+                "items": .array([.object(["type": .string("userMessage"), "content": content])])])
+        }
+        let state = JSONValue.object(["turns": .array([.object(original), following(reply)])])
+        let remaining = try DesktopQuestions.parse(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
+        #expect(remaining.map(\.title) == ["Second?"])
+        #expect(remaining.first?.key.turn == "native-turn")
+        let unrelated = JSONValue.object(["turns": .array([.object(original), following("New task")])])
+        #expect(try DesktopQuestions.parse(state: unrelated, threadID: "thread", owner: "desktop-owner", installation: "fixture").isEmpty)
     }
 }

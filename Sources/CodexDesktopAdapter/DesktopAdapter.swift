@@ -76,7 +76,7 @@ public actor DesktopAdapter: ResponseTransport {
             var wrote = false
             do {
                 let request = attempt.request, threadID = request.key.scope.conversation
-                guard let turnID = request.key.turn, case .string(let nativeID) = request.key.nativeID else { return .notSent }
+                guard request.key.turn != nil, case .string(let nativeID) = request.key.nativeID else { return .notSent }
                 let wire = try DesktopIPC(path: directory.appendingPathComponent("ipc/ipc.sock").path, timeout: 10)
                 defer { wire.close() }
                 let initialized = try wire.request(method: "initialize", version: 0, source: "initializing-client", params: ["clientType": "agent-handler"])
@@ -85,7 +85,9 @@ public actor DesktopAdapter: ResponseTransport {
                     params: ["hostId": "local", "conversationId": threadID])
                 guard discovered["handledByClientId"] as? String == request.owner,
                       let current = stream.thread(threadID), current.ownerClientID == request.owner,
-                      try DesktopQuestions.currentTurnID(current.state) == turnID,
+                      let turnID = try DesktopQuestions.currentTurnID(current.state),
+                      let turn = try DesktopQuestions.turn(turnID, in: current.state),
+                      ["inProgress", "completed"].contains(turn["status"].stringValue ?? ""),
                       try DesktopQuestions.parse(state: current.state, threadID: threadID, owner: request.owner, installation: installation)
                         .contains(where: { $0 == request }) else { return .notSent }
                 let answer: String
@@ -97,17 +99,39 @@ public actor DesktopAdapter: ResponseTransport {
                 }
                 let body = try JSONSerialization.data(withJSONObject: [["questionItemId": nativeID, "question": request.title, "answer": answer]], options: [.sortedKeys, .withoutEscapingSlashes])
                 let text = "<send_user_message_question_reply>\n" + String(decoding: body, as: UTF8.self) + "\n</send_user_message_question_reply>"
-                let id = UUID().uuidString.lowercased(), method = "thread-follower-steer-turn"
+                let id = UUID().uuidString.lowercased()
+                let startsTurn = turn["status"].stringValue == "completed"
+                let method = startsTurn ? "thread-follower-start-turn" : "thread-follower-steer-turn"
                 var context: [String: Any] = ["prompt": text, "turnTrigger": "send_user_message_async_question", "addedFiles": [], "fileAttachments": [], "ideContext": NSNull(), "imageAttachments": []]
                 var restore: [String: Any] = ["id": id, "text": text, "createdAt": Date().timeIntervalSince1970 * 1000]
                 if let cwd = current.state["cwd"].stringValue { context["workspaceRoots"] = [cwd]; restore["cwd"] = cwd }
                 restore["context"] = context
-                let response = try wire.request(method: method, version: 1, source: client, target: request.owner,
-                    params: ["conversationId": threadID, "clientUserMessageId": id, "input": [["type": "text", "text": text, "text_elements": []]], "attachments": [], "restoreMessage": restore], didWrite: { wrote = true })
+                let input: [[String: Any]] = [["type": "text", "text": text, "text_elements": []]]
+                let params: [String: Any]
+                if startsTurn {
+                    // The native owner inherits its effective settings. Never reconstruct or override
+                    // permissions, model, working directory or collaboration mode in the companion.
+                    params = ["conversationId": threadID, "turnStart": [
+                        "request": ["threadId": threadID, "input": input, "clientUserMessageId": id,
+                                    "turnTrigger": "send_user_message_async_question"],
+                        "context": ["inheritThreadSettings": true, "restoreMessage": restore, "attachments": []]
+                    ]]
+                } else {
+                    params = ["conversationId": threadID, "clientUserMessageId": id, "input": input,
+                              "attachments": [], "restoreMessage": restore]
+                }
+                try Task.checkCancellation()
+                let response = try wire.request(method: method, version: startsTurn ? 2 : 1, source: client, target: request.owner,
+                    params: params, didWrite: { wrote = true })
                 let receipt = try JSONValue.parse(JSONSerialization.data(withJSONObject: response))
                 guard receipt["handledByClientId"].stringValue == request.owner,
-                      receipt["result"]["method"].stringValue == method,
-                      receipt["result"]["result"]["result"]["turnId"].stringValue == turnID else { return .uncertain }
+                      receipt["result"]["method"].stringValue == method else { return .uncertain }
+                let result = receipt["result"]["result"]["result"]
+                if startsTurn {
+                    guard let newTurn = result["turn"]["id"].stringValue, !newTurn.isEmpty, newTurn != turnID else { return .uncertain }
+                } else {
+                    guard result["turnId"].stringValue == turnID else { return .uncertain }
+                }
                 return .accepted
             } catch { return wrote ? .uncertain : .notSent }
         }

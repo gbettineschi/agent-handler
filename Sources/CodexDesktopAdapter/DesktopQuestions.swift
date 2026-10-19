@@ -14,7 +14,52 @@ public enum DesktopQuestions {
         return try parse(state: JSONValue.parse(data, leavingOutStringsOver: 16_384), threadID: threadID, owner: owner, installation: installation)
     }
     static func parse(state: JSONValue, threadID: String, owner: String, installation: String) throws -> [AttentionRequest] {
-        guard let turn = try turns(state).last(where: { $0["status"].stringValue == "inProgress" }) else { return [] }
+        let history = try turns(state)
+        var hasOldest = true
+        if state["turnHistory"]["kind"].stringValue == "canonical" {
+            let islands = state["turnHistory"]["history"]["islands"].arrayValue ?? []
+            guard islands.count == 1, let island = islands.first,
+                  island["newerBoundary"]["status"].stringValue == "exhausted",
+                  (state["turns"].arrayValue ?? []).isEmpty else { throw Failure.unsupported }
+            hasOldest = island["olderBoundary"]["status"].stringValue == "exhausted"
+        }
+        var candidates: [JSONValue] = []
+        for (index, turn) in history.enumerated().reversed() {
+            guard ["inProgress", "completed"].contains(turn["status"].stringValue ?? "") else { break }
+            guard turn["itemsPagination"]["hasLoadedOldest"] != .bool(false),
+                  turn["itemsPagination"]["isLoadingOlder"] != .bool(true) else { throw Failure.unsupported }
+            candidates.append(turn)
+            guard let items = turn["items"].arrayValue else { throw Failure.unsupported }
+            let userItems = items.filter { $0["type"].stringValue == "userMessage" ||
+                ($0["type"].stringValue == "steeringUserMessage" && $0["status"].stringValue == "accepted") }
+            for item in userItems {
+                let content = item[item["type"].stringValue == "userMessage" ? "content" : "input"]
+                guard let parts = content.arrayValue, !parts.isEmpty, parts.allSatisfy({
+                    guard $0.objectValue != nil, let type = $0["type"].stringValue else { return false }
+                    switch type {
+                    case "text": return $0["text"].stringValue != nil
+                    case "localImage": return $0["path"].stringValue?.isEmpty == false
+                    default: return false
+                    }
+                }) else { throw Failure.unsupported }
+            }
+            // Only a native answer-only follow-up keeps an earlier question group current.
+            // An unrelated prompt ends that group; never resurrect arbitrary historical questions.
+            if userItems.isEmpty {
+                guard index == 0, hasOldest else { throw Failure.unsupported }
+                break
+            }
+            guard userItems.allSatisfy({ !answeredQuestionIDs($0).isEmpty }) else { break }
+            if index == 0, !hasOldest { throw Failure.unsupported }
+        }
+        let answered = Set(candidates.flatMap { ($0["items"].arrayValue ?? []).flatMap(answeredQuestionIDs) })
+        let requests = try candidates.reversed().flatMap {
+            try questions(in: $0, answered: answered, threadID: threadID, owner: owner, installation: installation)
+        }
+        guard requests.count <= 128, Set(requests.map(\.key)).count == requests.count else { throw Failure.unsupported }
+        return requests
+    }
+    private static func questions(in turn: JSONValue, answered: Set<String>, threadID: String, owner: String, installation: String) throws -> [AttentionRequest] {
         guard let turnID = turn["turnId"].stringValue, !turnID.isEmpty,
               let items = turn["items"].arrayValue else { throw Failure.unsupported }
         guard items.allSatisfy({ item in
@@ -25,7 +70,6 @@ public enum DesktopQuestions {
             let content = item["type"].stringValue == "userMessage" ? item["content"] : item["input"]
             if content.arrayValue?.contains(where: { $0["type"].stringValue == "text" && $0["text"] == .omitted }) == true { throw Failure.unsupported }
         }
-        let answered = Set(items.flatMap(answeredQuestionIDs))
         var requests: [AttentionRequest] = []
         for item in items where item["type"].stringValue == "agentMessage" && item["questions"] != .null {
             guard let sourceID = item["id"].stringValue, !sourceID.isEmpty,
@@ -48,7 +92,6 @@ public enum DesktopQuestions {
                     content: .question(options: labels.enumerated().map { .init(id: String($0.offset), label: $0.element) }, allowsText: true)))
             }
         }
-        guard requests.count <= 128, Set(requests.map(\.key)).count == requests.count else { throw Failure.unsupported }
         return requests
     }
     /// The owner steers its latest real turn, or an unfinished placeholder awaiting a turn ID.

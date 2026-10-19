@@ -62,7 +62,8 @@ public actor RequestController {
         // A receipt for a previous owner, epoch or request body cannot settle its replacement.
         if let current = store.records[key], current.epoch == attempt.epoch,
            store.scopes[key.scope]?.epoch == attempt.epoch,
-           current.view.request.fingerprint == fingerprint, current.view.state == .sending {
+           current.view.request.fingerprint == fingerprint,
+           (current.view.state == .sending || (current.view.state == .uncertain && actual == .accepted)) {
             switch actual {
             case .accepted: store.records[key]?.view.state = .accepted
             case .uncertain: store.records[key]?.view.state = .uncertain

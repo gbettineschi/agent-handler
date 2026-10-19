@@ -13,6 +13,48 @@ func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws 
 }
 
 struct DesktopAdapterTests {
+    @Test func replyTurnHydrationPreservesUnansweredSibling() async throws {
+        let text = String(decoding: try fixtureState(), as: UTF8.self).replacingOccurrences(of: "inProgress", with: "completed")
+        let original = try JSONValue.parse(Data(text.utf8))["turns"].arrayValue![0]
+        let server = try FixtureDesktopServer(state: .object(["turns": .array([original])]))
+        defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 2 }
+        var replyTurn: [String: JSONValue] = ["turnId": .string("reply-turn"), "status": .string("inProgress"), "items": .array([])]
+        server.state = .object(["turns": .array([original, .object(replyTurn)])])
+        try await eventually { await core.snapshot().filter { $0.state == .unavailable }.count == 2 }
+        let reply = #"<send_user_message_question_reply>[{"questionItemId":"[\"request_user_input_async\",\"message\",0]","question":"First?","answer":"Yes"}]</send_user_message_question_reply>"#
+        replyTurn["items"] = .array([.object(["type": .string("userMessage"),
+            "content": .array([.object(["type": .string("text"), "text": .string(reply)])])])])
+        server.state = .object(["turns": .array([original, .object(replyTurn)])])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 1 }
+        #expect(await core.snapshot().first { $0.state == .pending }?.request.title == "Second?")
+        #expect(server.answers.isEmpty)
+        await adapter.stop()
+    }
+    @Test(arguments: [true, false]) func completedQuestionStartsReplyWithInheritedSettings(acknowledges: Bool) async throws {
+        let text = String(decoding: try fixtureState(), as: UTF8.self).replacingOccurrences(of: "inProgress", with: "completed")
+        let server = try FixtureDesktopServer(state: JSONValue.parse(Data(text.utf8)), acknowledges: acknowledges)
+        defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 2 }
+        let first = try #require(await core.snapshot().first { $0.request.title == "First?" })
+        try await core.respond(key: first.id, fingerprint: first.request.fingerprint, answer: .option("0"), using: adapter)
+        #expect(await core.snapshot().first { $0.id == first.id }?.state == (acknowledges ? .accepted : .uncertain))
+        let sent = try #require(server.answers.first)
+        #expect(sent["method"] == .string("thread-follower-start-turn"))
+        #expect(sent["version"] == .integer(2))
+        let start = sent["params"]["turnStart"]
+        #expect(start["request"]["threadId"] == .string("thread"))
+        #expect(start["request"]["turnTrigger"] == .string("send_user_message_async_question"))
+        #expect(Set(start["request"].objectValue?.keys ?? [:].keys) == ["threadId", "input", "clientUserMessageId", "turnTrigger"])
+        #expect(start["context"]["inheritThreadSettings"] == .bool(true))
+        #expect(server.answers.count == 1)
+        #expect(await core.snapshot().first { $0.request.title == "Second?" }?.state == .pending)
+        await adapter.stop()
+    }
     // Retaining unrelated tool output used to push ordinary long conversations over the state cap.
     @Test(arguments: [false, true]) func largeToolHistoryPreservesQuestionsAndPatches(canonical: Bool) async throws {
         let tools: [[String: Any]] = (0..<900).map { index in

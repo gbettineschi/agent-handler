@@ -48,7 +48,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
     var methods: [String] { lock.withLock { received.compactMap { $0["method"].stringValue } } }
     var answers: [JSONValue] {
         lock.withLock { received.filter {
-            ["thread-follower-submit-mcp-server-elicitation-response", "thread-follower-steer-turn"].contains($0["method"].stringValue ?? "")
+            ["thread-follower-submit-mcp-server-elicitation-response", "thread-follower-steer-turn", "thread-follower-start-turn"].contains($0["method"].stringValue ?? "")
         } }
     }
     /// How many times a thread was asked for: followed, or followed again for its whole state.
@@ -210,6 +210,12 @@ final class FixtureDesktopServer: @unchecked Sendable {
             reply["handledByClientId"] = owner.map(JSONValue.string) ?? .null
             reply["result"] = .object(["method": .string(method), "result": .object([
                 "result": .object(["turnId": .string(acknowledges ? "native-turn" : "different-turn")]),
+            ])])
+        case "thread-follower-start-turn":
+            if dropAnswer { throw FixtureFailure.socket }
+            reply["handledByClientId"] = owner.map(JSONValue.string) ?? .null
+            reply["result"] = .object(["method": .string(method), "result": .object([
+                "result": .object(["turn": .object(["id": .string(acknowledges ? "new-reply-turn" : "native-turn")])])
             ])])
         default: throw FixtureFailure.protocolError
         }

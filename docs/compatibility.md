@@ -4,13 +4,15 @@ This is a development milestone, not universal agent interception.
 
 | Surface | Implemented | Evidence on 2026-10-19 |
 | --- | --- | --- |
-| Existing Codex/ChatGPT Desktop async questions | Native observation, free text and single-choice responses | Both option and typed answers submitted through the app UI arrived in the native conversation. Harmless test clicks were explicitly delegated to computer use. |
-| Answering in the source app | Reply envelopes withdraw matching requests | Parser/socket tests and fresh native observers verify reply removal. Direct source-app UI clicks remain untested because that app is blocked by the computer tool. |
+| Codex/ChatGPT Work Desktop async questions | Native observation, free text and single-choice responses | Option and typed answers arrived in the native conversation. A completed-turn Blue/Green question was also detected and answered; the native reply started a new turn. Clean receipt settlement for that idle path still needs a fresh live check. |
+| ChatGPT regular Chat mode | Not separately verified | The Blue/Green test uses the local owner stream and has `codex_work_desktop` metadata. Its screenshot does not independently establish regular Chat-mode coverage. |
+| Claude Desktop Chat / Cowork | No adapter | Claude Desktop 2.42304.2 displayed a native Blue/Green question in its Chat and Cowork interface. Agent Handler does not observe or answer it. Cowork task coverage has not been tested. |
+| Answering in the source app | Reply envelopes withdraw matching requests | Two user replies in the source conversation cleared their previously visible Agent Handler cards. The computer tool cannot itself click the source app; cleanup was checked in Agent Handler. |
 | Multiple questions and conversations | Independent request identity and scoped state | Two simultaneous native questions tested; answering one retained the other. Multiple conversations remain core/socket-fixture tested. |
 | Core approval model | Exact native choice IDs; no generic allow-all | Core tests only; no live approval adapter. |
 | Command, browser, app and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
-| Notch and menu fallback | Native AppKit/SwiftUI interface | Panel, text entry, option selection, request selector and collapse/reopen tested through computer use. Menu fallback, multiple displays and full keyboard navigation remain pending. |
+| Notch and menu fallback | Native AppKit/SwiftUI interface | Panel, text entry, option selection, request selector, × close button, Escape and collapse/reopen tested through computer use. Menu fallback, multiple displays and full keyboard navigation remain pending. |
 | Restart and uncertain delivery | Durable ledger and generation fencing | Whole-app restart retained a native pending question. SQLite reopen, concurrency and SIGKILL checks pass at three committed ledger checkpoints. Native uncertain-send restart and real sleep/wake remain pending. |
 
 ## Tested host
@@ -27,7 +29,9 @@ The probe stops on the first compatible owner or after twelve seconds; its count
 
 Desktop IPC is undocumented. Agent HUD Open's versioned implementation is the reference, with a pinned upstream revision and notices in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). This does not give the protocol an upstream stability promise.
 
-Before submitting, the adapter verifies the owner, active turn and exact question from its current stream. It validates the owner/method/turn in the receipt. The host submission method does not offer an atomic expected-question compare-and-set; a race remains between preflight and submission. Unknown delivery is retained as uncertain and never retried automatically.
+Before submitting, the adapter verifies the owner, current turn and exact question from its current stream. It validates the owner/method/turn in the receipt. The host submission method does not offer an atomic expected-question compare-and-set; a race remains between preflight and submission. Unknown delivery is retained as uncertain and never retried automatically.
+
+Running-turn answers use the native steer method. Completed-turn answers use the native start-turn method with inherited host settings; they do not override permissions, model or collaboration mode. A valid accepted receipt can settle a temporarily unavailable request only with the same epoch and fingerprint.
 
 Only stream version 11 and recognized complete question shapes become actionable. A version change, malformed state, revision gap or disconnection disables answering. Local permissions and peer UID are checked; the app does not change agent permission settings. Foreign-UID rejection is implemented, but a separate-UID runtime test has not been performed.
 
@@ -36,7 +40,8 @@ Only stream version 11 and recognized complete question shapes become actionable
 - At most 16 followed conversations and 128 unresolved requests.
 - Frames at most 128 MiB; supported content fields at most 16 KiB.
 - Conservative retained-tree accounting: 8 MiB per conversation, 64 MiB across the followed set, depth under 128. These are projection budgets, not exact RSS limits; receive buffers, parser temporaries and copy-on-write versions add transient memory.
-- Unused item fields are discarded before retained-budget admission. Identity, question content and accepted-answer envelopes stay intact; markers preserve paths for later native updates. Required oversized content is still unsupported.
+- Unused item and turn metadata fields are discarded before retained-budget admission. Identity, question content and accepted-answer envelopes stay intact; markers preserve paths for later native updates. Required oversized content is still unsupported.
+- Completed questions remain visible across consecutive native reply turns. A new ordinary prompt ends that earlier group. Gaps, partial item history, empty hydrating turns and unknown input types cannot establish withdrawal. Source-local Skip/dismiss state is not a verified protocol signal.
 - Candidate file metadata is checked every five seconds; SQL runs when metadata changes or at least every sixty seconds. No periodic full transcript scan.
 - Ten-second connection/answer deadline, thirty-second frame deadline and capped recovery/reconnect cadence.
 

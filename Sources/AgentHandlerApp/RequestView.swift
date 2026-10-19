@@ -6,17 +6,26 @@ struct HandlerPanelView: View {
     @ObservedObject var model: AppModel
     let expanded: Bool
     let toggle: () -> Void
+    let collapse: () -> Void
     @State private var selected: RequestKey?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button(action: toggle) {
-                HStack {
-                    Circle().fill(model.requests.isEmpty ? .gray : .orange).frame(width: 6, height: 6)
-                    Text(model.demo ? "Agent Handler · Demo" : "Agent Handler").font(.system(size: 12, weight: .medium))
-                    Spacer(minLength: 4)
-                    Text("\(model.requests.count)").font(.system(size: 12, weight: .semibold, design: .monospaced))
-                }.contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityLabel(expanded ? "Collapse Agent Handler" : "Expand Agent Handler")
+            HStack {
+                Button(action: toggle) {
+                    HStack {
+                        Circle().fill(model.requests.isEmpty ? .gray : .orange).frame(width: 6, height: 6)
+                        Text(model.demo ? "Agent Handler · Demo" : "Agent Handler").font(.system(size: 12, weight: .medium))
+                        Spacer(minLength: 4)
+                        Text("\(model.requests.count)").font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel(expanded ? "Collapse Agent Handler" : "Expand Agent Handler")
+                if expanded {
+                    Button(action: collapse) { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).accessibilityLabel("Close panel")
+                        .help("Collapse panel (Escape)")
+                        .keyboardShortcut(.cancelAction)
+                }
+            }
             if expanded {
                 HStack {
                     Text(model.health).font(.caption).foregroundStyle(.secondary).lineLimit(3)
@@ -43,11 +52,7 @@ struct HandlerPanelView: View {
                     }
                     Spacer(minLength: 0)
                 }
-                HStack {
-                    Button("Open in source") { model.openSource() }.disabled(model.demo)
-                    Spacer()
-                    if model.demo { Button("Reset demo") { Task { await model.loadDemo() } } }
-                }.font(.caption)
+                if model.demo { Button("Reset demo") { Task { await model.loadDemo() } }.font(.caption) }
             }
         }.padding(expanded ? 16 : 8).foregroundStyle(.white).background(.black)
             .clipShape(RoundedRectangle(cornerRadius: expanded ? 18 : 12))

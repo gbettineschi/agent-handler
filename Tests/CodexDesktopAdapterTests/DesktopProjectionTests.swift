@@ -3,6 +3,25 @@ import AgentHandlerCore
 @testable import CodexDesktopAdapter
 
 struct DesktopProjectionTests {
+    // Live long conversations carry megabytes of hook-run metadata outside items.
+    // Keeping it must not prevent delivery of otherwise small, valid questions.
+    @Test(arguments: [false, true]) func unusedTurnMetadataCannotExhaustQuestionBudget(canonical: Bool) throws {
+        var state = try JSONValue.parse(fixtureState(canonical: canonical))
+        let turn = Array(itemsPath(canonical).dropLast())
+        let hooks = JSONValue.array((0..<900).map { _ in .object(["output": .string(String(repeating: "x", count: 10_000))]) })
+        try DesktopPatches.apply([patch("add", turn + [.string("hookRuns")], hooks)], to: &state)
+        let expected = try questions(state)
+        DesktopProjection.compact(&state)
+        #expect(ProjectionBudget.cost(state, available: ProjectionBudget.total) != nil)
+        #expect(try questions(state) == expected)
+        try DesktopPatches.apply([
+            patch("replace", turn + [.string("hookRuns"), .integer(0), .string("output")], .string("Changed")),
+            patch("replace", itemsPath(canonical) + [.integer(0), .string("questions"), .integer(0), .string("title")], .string("Still live?"))
+        ], to: &state)
+        DesktopProjection.compact(&state)
+        #expect(ProjectionBudget.cost(state, available: ProjectionBudget.total) != nil)
+        #expect(try questions(state).first?.title == "Still live?")
+    }
     private func patch(_ op: String, _ path: [JSONValue], _ value: JSONValue = .null) -> JSONValue {
         .object(["op": .string(op), "path": .array(path), "value": value])
     }
