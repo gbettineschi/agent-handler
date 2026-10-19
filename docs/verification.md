@@ -102,6 +102,10 @@ The user's clarified ordinary Chat scope is activity/completion tracking, withou
 
 The available socket-free command passed **59 test functions across 12 suites**. The complete invocation ran **76 test functions across 14 suites** and reported **23 socket-denial issues**: 15 cases in DesktopAdapterTests, five in DesktopApprovalTests (the native dispatch and incomplete-question-history socket tests), and three in DesktopSocketTests. These include the new completion/disconnect/stop/unfollow fixture, which therefore remains unexecuted here. The release bundle built and `codesign --verify --deep --strict` passed. `git diff --check` passed. No escalation was requested because this turn rejects sandbox approvals. These results do not replace a native activity check, real reconnect/sleep/wake test or full macOS CI run for this revision.
 
+A fresh-context reviewer inspected `cde4938..14b97e0` and relevant existing stream/request code. It found no Critical/Important issue. A Minor misleading health summary omitted failed/cancelled counts; both counts were added. The reviewer did not independently rerun tests or operate the host. Ordinary Chat/Claude sources, whole-agent-tree completion, notification delivery and native lifecycle checks remain outside that review result.
+
+The activity branch remains local: `git ls-remote origin HEAD` failed because this session could not resolve github.com. No new CI result is available. The previously running app has not been restarted onto the activity build.
+
 ## Independent review
 
 One fresh-context reviewer inspected the whole implementation and reproduced three Important defects with independent synthetic harnesses. All three were reproduced by failing repository tests and then fixed:

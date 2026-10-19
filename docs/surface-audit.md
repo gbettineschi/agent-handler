@@ -55,6 +55,8 @@ The installed renderer includes Chat-style question widgets carrying `codex_requ
 
 Internal preload MessagePorts and the host's loopback MCP service are trusted-renderer/executor plumbing, not demonstrated external integration points. No credentials were extracted, backend requests made, or source-app UI restrictions bypassed. A cooperative plugin could expose its own question tool, but that would not capture every native prompt. See [OpenAI plugin extensions](https://developers.openai.com/plugins/build/extensions).
 
+The official [MCP Events integration](https://developers.openai.com/plugins/build/mcp-events), checked on 19 October, delivers updates from a plugin's server **into** Work Cloud chats or dots. It is not documented as an outbound subscription to ordinary Chat completions. The [Codex hooks reference](https://learn.chatgpt.com/docs/hooks) documents lifecycle hooks including Stop and Interrupt; its presence does not establish that ordinary Chat runs them. These mechanisms remain distinct from the missing ordinary Chat companion feed.
+
 The earlier Blue/Green test used the local owner stream and has Work Desktop origin metadata. That metadata and its screenshot do not independently verify regular Chat-mode coverage. This remains unverified, not a claim of impossibility.
 
 ## Claude Desktop / Cowork
@@ -68,6 +70,8 @@ Official [Claude Code hooks](https://code.claude.com/docs/en/hooks) provide a pr
 Claude's [Cowork plugin documentation](https://claude.com/docs/cowork/guide/plugins) supports bundled hooks. [Cowork loads account-enabled plugins at session start](https://claude.com/docs/cowork/overview), separately from CLI-only `~/.claude` configuration. The [third-party-provider Desktop documentation](https://claude.com/docs/third-party/claude-desktop/extensions#plugin-hooks) additionally documents Chat hooks from version 1.52386.0. Its deployment scope must not be silently generalized to the consumer account tested here.
 
 The consumer [plugin help article](https://support.claude.com/en/articles/13837440-use-plugins-in-claude), checked again on 19 October, explicitly limits plugin hooks and sub-agents to Cowork and Claude Code; they do not run in ordinary Chat. It likewise excludes plugin-local MCP servers from Chat. This supplies a documented reason that a listed hook is not consumer Chat coverage. The different third-party-provider deployment documentation does not override that consumer limitation.
+
+Anthropic separately documents [Enterprise inference hooks](https://support.claude.com/en/articles/16059458-inference-hooks-overview), checked on 19 October: a centrally hosted policy endpoint can inspect prompts/tool calls across Enterprise Claude products. The fetched page says generally available; the search snippet still said beta, so the fetched page is the evidence. This is an Enterprise organization feature managed by owners, not a hook capability demonstrated on this Free consumer account. Its native question-response and completion semantics have not been validated here.
 
 The current [Cowork architecture overview](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview) describes cloud execution by default, with local execution retained for existing deployments. Device access uses Anthropic's broker and the desktop app. A future hook adapter must establish its execution location and permitted return channel; it cannot assume every hook runs on the Mac or can reach a Mac Unix socket. The existing Mac-only probe file path is not a universal hook-execution detector.
 

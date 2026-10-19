@@ -45,10 +45,10 @@
 
 **Interfaces:** Consumes Task 1 ActivityStore. Produces `DesktopActivity.parse(state:threadID:owner:installation:) throws -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention)` and `DesktopAdapter.activity() -> [ActivityView]`.
 
-- [ ] Write parser tests: legacy/canonical phases; completed question -> needs input; malformed question/unknown request -> unknown attention; exhausted newer boundary required; overlay ambiguity/empty turns/unknown status rejected. Write a socket fixture integration test for running -> completed, disconnect -> unknown, stop -> unknown and unfollow -> removal.
-- [ ] Run parser tests; expect failure because DesktopActivity does not exist.
-- [ ] Implement the projection. Reuse structural turn decoding without weakening question withdrawal rules. Unknown native request methods cannot establish clear attention. Track owner epochs and invalidate missing/unsupported states in the adapter, with existing generation checks after awaits.
-- [ ] Publish snapshots in AppModel and add phase counts to existing health text and diagnostics JSON. Do not change question selection, answer encoding or notification behavior.
-- [ ] Run `scripts/test.sh --skip 'DesktopSocketTests/|DesktopAdapterTests/|nativeApprovalDispatchIsNotAnExecutionReceipt|approvalsStayIndependentFromIncompleteQuestionHistory'`; expect available tests pass. Run the complete suite once and report any denied socket cases by suite, without escalation requests.
-- [ ] Run `scripts/bundle.sh`, `codesign --verify --deep --strict 'dist/Agent Handler.app'`, and `git diff --check`; expect success.
-- [ ] Update docs with actual evidence, ordinary Chat activity-only scope and outstanding source/host checks; commit. Request a fresh whole-change review, address material findings with regression tests, then rerun affected checks.
+- [x] Write parser tests: legacy/canonical phases; completed question -> needs input; malformed question/unknown request -> unknown attention; exhausted newer boundary required; overlay ambiguity/empty turns/unknown status rejected. Write a socket fixture integration test for running -> completed, disconnect -> unknown, stop -> unknown and unfollow -> removal.
+- [x] Run parser tests; expect failure because DesktopActivity does not exist.
+- [x] Implement the projection. Reuse structural turn decoding without weakening question withdrawal rules. Unknown native request methods cannot establish clear attention. Track owner epochs and invalidate missing/unsupported states in the adapter, with existing generation checks after awaits.
+- [x] Publish snapshots in AppModel and add phase counts to existing health text and diagnostics JSON. Do not change question selection, answer encoding or notification behavior.
+- [x] Run `scripts/test.sh --skip 'DesktopSocketTests/|DesktopAdapterTests/|nativeApprovalDispatchIsNotAnExecutionReceipt|approvalsStayIndependentFromIncompleteQuestionHistory'`; expect available tests pass. Run the complete suite once and report any denied socket cases by suite, without escalation requests.
+- [x] Run `scripts/bundle.sh`, `codesign --verify --deep --strict 'dist/Agent Handler.app'`, and `git diff --check`; expect success.
+- [x] Update docs with actual evidence, ordinary Chat activity-only scope and outstanding source/host checks; commit. Request a fresh whole-change review, address material findings with regression tests, then rerun affected checks.

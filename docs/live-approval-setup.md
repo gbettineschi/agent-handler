@@ -1,6 +1,6 @@
 # Prepare the live approval test
 
-The latest Agent Handler build is already bundled and restarted. The remaining prerequisite is the source conversation's execution policy.
+The granular-approval build was bundled and restarted, and the later Clock test passed through Agent Handler. The new activity backend bundle is prepared separately; its native activity check has not run. The remaining shell-test prerequisite is the source conversation's execution policy.
 
 ## Confirmed current state
 

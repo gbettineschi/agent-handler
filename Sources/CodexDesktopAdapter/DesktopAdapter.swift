@@ -51,7 +51,7 @@ public actor DesktopAdapter: ResponseTransport {
             known == 0 ? "Desktop unavailable or incompatible — use the source app" :
             "Observing \(known) Desktop conversations · questions and supported approvals"
         let views = activityStore.views
-        let activity = views.isEmpty ? "" : " · \(views.filter { $0.status == .running }.count) running · \(views.filter { $0.status == .needsInput }.count) need input · \(views.filter { $0.status == .completed }.count) completed · \(views.filter { $0.status == .unknown }.count) unknown"
+        let activity = views.isEmpty ? "" : " · \(views.filter { $0.status == .running }.count) running · \(views.filter { $0.status == .needsInput }.count) need input · \(views.filter { $0.status == .completed }.count) completed · \(views.filter { $0.status == .failed }.count) failed · \(views.filter { $0.status == .cancelled }.count) cancelled · \(views.filter { $0.status == .unknown }.count) unknown"
         return .init(followed: wanted.count, known: known, message: message + activity +
             (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"))
     }
