@@ -181,3 +181,5 @@ The new socket suite covers exact browser accept/deny routing and persistence sc
 
 
 Independent review of `663253d..14b7264` found no Critical/Important/Minor defect. Its isolated socket/controller/safety run passed 17 test functions across three suites, including 10 extra SQLite owner-change, late-closure and read-failure cases. Those three controls were retained as `RecoverySafetyTests`; the executor's full 105-test run includes them. The reviewer did not independently operate the native host and did not verify shell/browser acceptance, source-host restart or native uncertain-send restart.
+
+Code/test commit `5336575` passed [GitHub macOS verification](https://github.com/gbettineschi/agent-handler/actions/runs/39336171264), including the full synthetic suite, release bundle, controller demo and strict signature. A final read-only native policy check at revision 20713 still reported user/never/dangerFullAccess and zero pending requests. The following documentation-only commit records these results; no production code changed after that CI-tested commit.
