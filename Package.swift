@@ -9,11 +9,13 @@ let package = Package(
         .systemLibrary(name: "CSQLite"),
         .target(name: "AgentHandlerCore", dependencies: ["CSQLite"]),
         .target(name: "CodexDesktopAdapter", dependencies: ["AgentHandlerCore", "CSQLite"]),
+        .target(name: "ClaudeDesktopAdapter", dependencies: ["AgentHandlerCore"]),
         .executableTarget(name: "AgentHandlerApp", dependencies: ["AgentHandlerCore", "CodexDesktopAdapter"]),
         .executableTarget(name: "AgentHandlerDiagnostics", dependencies: ["AgentHandlerCore", "CodexDesktopAdapter"]),
         .executableTarget(name: "LedgerCrashFixture", dependencies: ["AgentHandlerCore"], path: "Tests/Fixtures/LedgerCrashFixture"),
         .testTarget(name: "AgentHandlerCoreTests", dependencies: ["AgentHandlerCore", "CSQLite", "LedgerCrashFixture"]),
         .testTarget(name: "CodexDesktopAdapterTests", dependencies: ["CodexDesktopAdapter", "AgentHandlerCore", "CSQLite"]),
+        .testTarget(name: "ClaudeDesktopAdapterTests", dependencies: ["ClaudeDesktopAdapter", "AgentHandlerCore"]),
         .testTarget(name: "AgentHandlerAppTests", dependencies: ["AgentHandlerApp"])
     ], swiftLanguageModes: [.v6]
 )
