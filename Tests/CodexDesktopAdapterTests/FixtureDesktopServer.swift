@@ -62,6 +62,18 @@ final class FixtureDesktopServer: @unchecked Sendable {
         }.count }
     }
 
+    func emitSnapshot(_ state: JSONValue, thread: String, revision: Int64) {
+        let targets = lock.withLock { followers.filter { $0.value.contains(thread) }.map(\.key) }
+        for peer in targets {
+            try? send(peer, .object([
+                "type": .string("broadcast"), "method": .string("thread-stream-state-changed"), "version": .integer(streamVersion),
+                "sourceClientId": owner.map(JSONValue.string) ?? .null,
+                "params": .object(["hostId": .string("local"), "conversationId": .string(thread),
+                    "change": .object(["type": .string("snapshot"), "revision": .integer(revision), "conversationState": state])])
+            ]))
+        }
+    }
+
     /// Sends followers one of the hub's own announcements.
     func announce(_ method: String, _ params: [String: JSONValue]) {
         let targets = lock.withLock { Array(followers.keys) }

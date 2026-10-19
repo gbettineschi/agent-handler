@@ -13,6 +13,50 @@ func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws 
 }
 
 struct DesktopAdapterTests {
+    @Test func malformedQuestionStateRetainsCardsUntilValidRecovery() async throws {
+        let valid = try JSONValue.parse(fixtureState())
+        let server = try FixtureDesktopServer(state: valid); defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 2 }
+        server.state = .object(["turns": .array([.object([:])])])
+        try await eventually { await core.snapshot().allSatisfy { $0.state == .unavailable } }
+        #expect(await core.snapshot().count == 2)
+        server.state = valid
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 2 }
+        await adapter.stop()
+    }
+    @Test func gapRejectsSnapshotsBelowLatestObservedRevision() async throws {
+        let empty = JSONValue.object(["turns": .array([])])
+        let server = try FixtureDesktopServer(state: empty); defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.health().known == 1 }
+        server.change([], base: 0) // Observed revision 2; missing base must invalidate revision 1.
+        try await eventually { await adapter.health().known == 0 }
+        let obsolete = try JSONValue.parse(fixtureState())
+        server.emitSnapshot(obsolete, thread: "thread", revision: 0)
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(await core.snapshot().filter(\.needsAttention).isEmpty)
+        server.emitSnapshot(obsolete, thread: "thread", revision: 1)
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(await core.snapshot().filter(\.needsAttention).isEmpty)
+        #expect(server.answers.isEmpty)
+        server.emitSnapshot(empty, thread: "thread", revision: 2)
+        try await eventually { await adapter.health().known == 1 }
+        #expect(await core.snapshot().filter(\.needsAttention).isEmpty)
+        await adapter.stop()
+    }
+    @Test func malformedSnapshotDoesNotDisableHealthyConversation() async throws {
+        let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState())); defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["broken", "healthy"])
+        try await eventually { await core.snapshot().filter { $0.state == .pending }.count == 4 }
+        server.emitSnapshot(.null, thread: "broken", revision: 2)
+        try await eventually { await core.snapshot().filter { $0.id.scope.conversation == "broken" }.allSatisfy { $0.state == .unavailable } }
+        #expect(await core.snapshot().filter { $0.id.scope.conversation == "healthy" && $0.state == .pending }.count == 2)
+        await adapter.stop()
+    }
     @Test func cancellationBeforeAnswerWriteDoesNotSend() async throws {
         let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState())); defer { server.stop() }
         let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)

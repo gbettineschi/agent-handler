@@ -18,6 +18,16 @@ func parseQuestions(_ data: Data) throws -> [AttentionRequest] {
 }
 
 struct DesktopQuestionTests {
+    @Test func malformedTurnStoresCannotEstablishWithdrawal() throws {
+        let values = [
+            #"{"turns":[{}]}"#,
+            #"{"turns":[{"turnId":"t","status":"newStatus","items":[]}]}"#,
+            #"{"turns":[],"turnHistory":{"kind":"newStore"}}"#,
+            #"{"turns":[{"turnId":"t","status":"inProgress","items":[null]}]}"#,
+            #"{"turns":[{"turnId":"t","status":"inProgress","items":[{"type":"newItem"}]}]}"#
+        ]
+        for value in values { #expect(throws: (any Error).self) { _ = try parseQuestions(Data(value.utf8)) } }
+    }
     @Test func omittedOptionsCannotBecomeFreeText() throws {
         #expect(throws: (any Error).self) {
             _ = try parseQuestions(fixtureState(questions: [["title": "Q", "options": String(repeating: "x", count: 20_000)]]))

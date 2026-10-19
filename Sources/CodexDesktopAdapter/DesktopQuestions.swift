@@ -4,6 +4,11 @@ import AgentHandlerCore
 
 public enum DesktopQuestions {
     public enum Failure: Error { case unsupported }
+    // Discriminators observed on the pinned Desktop build. New kinds require a compatibility check.
+    private static let knownItems: Set<String> = ["agentMessage", "automaticApprovalReview", "collabAgentToolCall",
+        "commandExecution", "contextCompaction", "fileChange", "forkedFromConversation", "mcpServerElicitation",
+        "mcpToolCall", "modelChanged", "reasoning", "sleep", "steered", "steeringUserMessage", "subAgentActivity",
+        "userMessage", "webSearch"]
     public static func decode(_ data: Data, threadID: String, owner: String, installation: String) throws -> [AttentionRequest] {
         guard data.count <= 128 * 1024 * 1024 else { throw Failure.unsupported }
         return try parse(state: JSONValue.parse(data, leavingOutStringsOver: 16_384), threadID: threadID, owner: owner, installation: installation)
@@ -12,6 +17,10 @@ public enum DesktopQuestions {
         guard let turn = try turns(state).last(where: { $0["status"].stringValue == "inProgress" }) else { return [] }
         guard let turnID = turn["turnId"].stringValue, !turnID.isEmpty,
               let items = turn["items"].arrayValue else { throw Failure.unsupported }
+        guard items.allSatisfy({ item in
+            guard item.objectValue != nil, let kind = item["type"].stringValue, knownItems.contains(kind) else { return false }
+            return kind != "agentMessage" || item["id"].stringValue?.isEmpty == false
+        }) else { throw Failure.unsupported }
         for item in items where item["type"].stringValue == "userMessage" || item["type"].stringValue == "steeringUserMessage" {
             let content = item["type"].stringValue == "userMessage" ? item["content"] : item["input"]
             if content.arrayValue?.contains(where: { $0["type"].stringValue == "text" && $0["text"] == .omitted }) == true { throw Failure.unsupported }
@@ -68,9 +77,12 @@ public enum DesktopQuestions {
             guard fields["turnHistory"] != nil else { throw Failure.unsupported }
             overlay = []
         }
-        guard let storage = fields["turnHistory"], storage != .null else { return overlay }
+        guard let storage = fields["turnHistory"], storage != .null else {
+            guard fields["turns"] != nil else { throw Failure.unsupported }
+            return try validatedTurns(overlay)
+        }
         guard storage.objectValue != nil else { throw Failure.unsupported }
-        guard storage["kind"].stringValue == "canonical" else { return overlay }
+        guard storage["kind"].stringValue == "canonical" else { throw Failure.unsupported }
         let history = storage["history"]
         guard let islands = history["islands"].arrayValue,
               let entities = history["entitiesByKey"].objectValue else { throw Failure.unsupported }
@@ -90,7 +102,17 @@ public enum DesktopQuestions {
         guard !overlay.contains(where: { $0["turnId"].stringValue.map(canonicalIDs.contains) == true }) else {
             throw Failure.unsupported
         }
-        return includeOverlay ? canonical + overlay : canonical
+        return try validatedTurns(includeOverlay ? canonical + overlay : canonical)
+    }
+
+    private static func validatedTurns(_ turns: [JSONValue]) throws -> [JSONValue] {
+        let statuses: Set<String> = ["inProgress", "completed", "failed", "interrupted"]
+        guard turns.allSatisfy({ turn in
+            guard turn.objectValue != nil, let id = turn["turnId"].stringValue, !id.isEmpty,
+                  let status = turn["status"].stringValue, statuses.contains(status) else { return false }
+            return status != "inProgress" || turn["items"].arrayValue != nil
+        }), turns.filter({ $0["status"].stringValue == "inProgress" }).count <= 1 else { throw Failure.unsupported }
+        return turns
     }
 
     private static func answeredQuestionIDs(_ item: JSONValue) -> [String] {

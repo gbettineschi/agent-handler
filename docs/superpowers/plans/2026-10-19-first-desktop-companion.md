@@ -54,11 +54,11 @@
 - `RequestController` actor consumes store, `DeliveryLedger` and `ResponseTransport`; exposes `begin(scope:)`, `observe(_:)`, `invalidate(scope:epoch:)`, `snapshot()`, `updates()` and `respond(key:fingerprint:answer:using:) async throws`.
 - `ResponseTransport.deliver(_ attempt: ResponseAttempt) async -> DeliveryOutcome` returns accepted, notSent, rejected or uncertain.
 
-- [ ] Write core tests for two independent same-wording requests, integer/string IDs, stale epoch/revision, per-scope withdrawal, malformed snapshots, content replacement, duplicate clicks and late delivery results. Use a suspended fake transport to control races.
-- [ ] Run `scripts/test.sh --filter CoreTests`; expected failures establish absent lifecycle behavior, rather than toolchain problems.
-- [ ] Implement typed domain and pure store, then the controller. Reserve an attempt synchronously before the first await. UI answers carry the expected fingerprint; only advertised response types are valid.
-- [ ] Run `scripts/test.sh`; expected all core tests pass, including rejected stale actions and one transport call for double submission.
-- [ ] Commit `feat: add request lifecycle and single-owner controller`.
+- [x] Write core tests for two independent same-wording requests, integer/string IDs, stale epoch/revision, per-scope withdrawal, malformed snapshots, content replacement, duplicate clicks and late delivery results. Use a suspended fake transport to control races.
+- [x] Run `scripts/test.sh --filter CoreTests`; expected failures establish absent lifecycle behavior, rather than toolchain problems.
+- [x] Implement typed domain and pure store, then the controller. Reserve an attempt synchronously before the first await. UI answers carry the expected fingerprint; only advertised response types are valid.
+- [x] Run `scripts/test.sh`; expected all core tests pass, including rejected stale actions and one transport call for double submission.
+- [x] Commit `feat: add request lifecycle and single-owner controller`.
 
 ## Task 2: Durable delivery ledger
 
@@ -66,11 +66,11 @@
 - `DeliveryLedger.reserve(key:fingerprint:attemptID:) throws`, `finish(key:attemptID:outcome:) throws`, `status(for:) throws -> LedgerStatus?`, `close(key:) throws` are synchronous and serialized by implementations.
 - `SQLiteLedger.init(url:) throws` opens or migrates schema version 1 and recovers in-flight attempts as uncertain. The ledger persists hashes rather than user text.
 
-- [ ] Write tests using a temporary SQLite database: reservation survives restart; changed fingerprint does not unlock uncertainty; confirmed acceptance survives replay; definitive notSent permits a newly validated attempt; wrong attempt ID cannot overwrite a newer result; newer schema and unwritable storage fail safely.
-- [ ] Run `scripts/test.sh --filter LedgerTests`; expected failures for missing persistence and reservation uniqueness.
-- [ ] Implement SQLite transactions, WAL/FULL, prepared statements, schema checks and ledger error handling. Add private directory permissions and an advisory instance lock in the application runtime setup.
-- [ ] Run `scripts/test.sh`; expected restart, content privacy, concurrency and original core tests pass. Inspect the temporary database schema in the test to verify no answer/prompt columns.
-- [ ] Commit `feat: persist delivery attempts before sending`.
+- [x] Write tests using a temporary SQLite database: reservation survives restart; changed fingerprint does not unlock uncertainty; confirmed acceptance survives replay; definitive notSent permits a newly validated attempt; wrong attempt ID cannot overwrite a newer result; newer schema and unwritable storage fail safely.
+- [x] Run `scripts/test.sh --filter LedgerTests`; expected failures for missing persistence and reservation uniqueness.
+- [x] Implement SQLite transactions, WAL/FULL, prepared statements, schema checks and ledger error handling. Add private directory permissions and an advisory instance lock in the application runtime setup.
+- [x] Run `scripts/test.sh`; expected restart, content privacy, concurrency and original core tests pass. Inspect the temporary database schema in the test to verify no answer/prompt columns.
+- [x] Commit `feat: persist delivery attempts before sending`.
 
 ## Task 3: Desktop protocol and question adapter
 
@@ -80,12 +80,12 @@
 - `DesktopStream` publishes typed per-conversation known/unknown observations with generation and revision; maps snapshots and patches without inventing empty state.
 - `DesktopAdapter` implements `ResponseTransport`, owns the stream and routes observations to `RequestController`; `start(threadIDs:)`, `stop()` and `health` provide lifecycle control.
 
-- [ ] Write parser tests for canonical history, multiple questions, answered envelopes, missing fields, large/truncated content, unsupported shapes and duplicate IDs. Write socket fixture tests for split frames, interleaved broadcasts, EOF, timeout, foreign peers/version, owner change and receipt mismatch.
-- [ ] Run `scripts/test.sh --filter Desktop`; expected failures for missing provider behavior.
-- [ ] Adapt the narrow upstream JSON, IPC and patch utilities with notices. Enforce bounds before retaining state, unknown-state invalidation, idempotent close and explicit cancellation. Implement stream owner discovery/following and capped recovery/backoff.
-- [ ] Implement question extraction and native response encoding, checking owner and current exact question immediately before sending. Mark any possibly-written but unconfirmed attempt uncertain; preserve native receipt identity. Do not automatically retry.
-- [ ] Run `scripts/test.sh`; expected real-socket provider tests and all core/ledger tests pass. Add a diagnostic fixture scenario using the same controller and adapter.
-- [ ] Commit `feat: connect Desktop questions with verified receipts`.
+- [x] Write parser tests for canonical history, multiple questions, answered envelopes, missing fields, large/truncated content, unsupported shapes and duplicate IDs. Write socket fixture tests for split frames, interleaved broadcasts, EOF, timeout, foreign peers/version, owner change and receipt mismatch.
+- [x] Run `scripts/test.sh --filter Desktop`; expected failures for missing provider behavior.
+- [x] Adapt the narrow upstream JSON, IPC and patch utilities with notices. Enforce bounds before retaining state, unknown-state invalidation, idempotent close and explicit cancellation. Implement stream owner discovery/following and capped recovery/backoff.
+- [x] Implement question extraction and native response encoding, checking owner and current exact question immediately before sending. Mark any possibly-written but unconfirmed attempt uncertain; preserve native receipt identity. Do not automatically retry.
+- [x] Run `scripts/test.sh`; expected real-socket provider tests and all core/ledger tests pass. Add a diagnostic fixture scenario using the same controller and adapter.
+- [x] Commit `feat: connect Desktop questions with verified receipts`.
 
 ## Task 4: Minimal native app and bounded discovery
 
@@ -94,13 +94,13 @@
 - `AppModel` subscribes to controller updates, dispatches explicit responses, reports adapter health and opens the source application.
 - `NotchPanel` owns AppKit window geometry; `RequestView` renders current requests and exact supported choices.
 
-- [ ] Add tests for candidate limits, unsupported metadata, bounded selection, single-instance lock and panel placement on notched/non-notched screens through pure geometry helpers.
-- [ ] Run the new tests; expected failures for absent behavior.
-- [ ] Implement read-only discovery with change coalescing and periodic bounded reconciliation, preserving explicitly selected conversations and pending requests. Wire sleep/wake invalidation.
-- [ ] Add notch attention count, expandable queue, question text/choices/free text, explicit Send and Open in source. Keep sending/unknown/uncertain visible. Include clearly labeled demo mode, display selection, adapter toggle and launch-at-login setting.
-- [ ] Run `scripts/test.sh` and `scripts/bundle.sh`; expected passing tests and a runnable development `.app` under ignored `dist/`.
+- [x] Add tests for candidate limits, unsupported metadata, bounded selection, single-instance lock and panel placement on notched/non-notched screens through pure geometry helpers.
+- [x] Run the new tests; expected failures for absent behavior.
+- [x] Implement read-only discovery with change coalescing and periodic bounded reconciliation, preserving explicitly selected conversations and pending requests. Wire sleep/wake invalidation.
+- [x] Add notch attention count, expandable queue, question text/choices/free text, explicit Send and Open in source. Keep sending/unknown/uncertain visible. Include clearly labeled demo mode, display selection, adapter toggle and launch-at-login setting.
+- [x] Run `scripts/test.sh` and `scripts/bundle.sh`; expected passing tests and a runnable development `.app` under ignored `dist/`.
 - [ ] Inspect demo UI in the running app, including keyboard entry and multiple simultaneous questions; verify only the selected fixture request settles.
-- [ ] Commit `feat: add minimal notch companion and source navigation`.
+- [x] Commit `feat: add minimal notch companion and source navigation`.
 
 ## Task 5: Compatibility evidence, review and private delivery
 
@@ -115,3 +115,7 @@
 ## Execution decisions
 
 The user approved this design and explicitly waived further planning approval pauses. Execute inline, then request one independent final review. This is a fresh dedicated repository with no pre-existing product code or concurrent user changes; use the `feat/first-desktop-companion` branch in this checkout rather than adding a second checkout. Publishing to the requested private repository is authorized.
+
+## Verification qualifications
+
+Core, persistence, adapter and app implementation steps are complete. The separate-UID peer rejection path is implemented but was not exercised with a foreign-UID process. Visual/keyboard checks and live user-clicked responses remain pending because the Mac was locked; these are not claimed as passed. Native read-only discovery and pending-question parsing succeeded. Detailed evidence is in `docs/verification.md` and `docs/compatibility.md`.

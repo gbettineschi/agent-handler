@@ -51,6 +51,8 @@ public final class DesktopStream: @unchecked Sendable {
     private var published: [String: Thread] = [:]
     private var running = false
     private var generation = 0
+    // Survives gaps/reconnects for the same owner. A new owner establishes a new revision domain.
+    private var revisionFloors: [String: (owner: String, revision: Int64)] = [:]
     private var listeners: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     public init(dataDirectory: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")) {
@@ -66,6 +68,7 @@ public final class DesktopStream: @unchecked Sendable {
             guard interests[interest, default: []] != threadIDs else { return nil }
             interests[interest] = threadIDs.isEmpty ? nil : threadIDs
             wanted = interests.values.reduce(into: []) { $0.formUnion($1) }
+            revisionFloors = revisionFloors.filter { wanted.contains($0.key) }
             lock.broadcast()
             guard !wanted.isEmpty, !running else { return nil }
             running = true
@@ -147,6 +150,15 @@ public final class DesktopStream: @unchecked Sendable {
     }
 
     private func active(_ run: Int) -> Bool { lock.withLock { running && generation == run } }
+
+    private func acceptRevision(_ revision: Int64, thread: String, owner: String, run: Int) -> Bool {
+        lock.withLock {
+            guard running, generation == run, wanted.contains(thread), revision >= 0 else { return false }
+            if let previous = revisionFloors[thread], previous.owner == owner, revision < previous.revision { return false }
+            revisionFloors[thread] = (owner, revision)
+            return true
+        }
+    }
 
     private func work(_ run: Int) {
         var wait: TimeInterval = 1
@@ -256,9 +268,14 @@ public final class DesktopStream: @unchecked Sendable {
                         let change = params["change"]
                         switch change["type"].stringValue {
                         case "snapshot":
-                            guard change["conversationState"].objectValue != nil, case .integer(let revision) = change["revision"] else {
-                                throw DesktopIPC.Failure.protocolError
+                            guard case .integer(let revision) = change["revision"], revision >= 0 else {
+                                entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
                             }
+                            guard acceptRevision(revision, thread: thread, owner: entry.owner, run: run) else { break }
+                            guard change["conversationState"].objectValue != nil else {
+                                entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
+                            }
+                            if entry.state != nil && revision == entry.revision { break }
                             guard let cost = retainedCost(change["conversationState"], replacing: thread) else {
                                 unfollow(thread); foreign.insert(thread); break
                             }
@@ -268,6 +285,11 @@ public final class DesktopStream: @unchecked Sendable {
                             followed[thread] = entry
                             dirty = true
                         case "patches":
+                            guard case .integer(let observedRevision) = change["revision"], observedRevision >= 0 else {
+                                entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
+                            }
+                            // Even when the base is missing, recovery must include this observed revision.
+                            guard acceptRevision(observedRevision, thread: thread, owner: entry.owner, run: run) else { break }
                             // Patches sent before the state they follow has arrived are covered by that state.
                             guard var state = entry.state else { break }
                             // The entry gives its state up while it changes, so the state changes in place.
@@ -277,7 +299,7 @@ public final class DesktopStream: @unchecked Sendable {
                                 // A change the kept state already includes: it was on its way when the state was sent.
                                 entry.state = state
                             } else if case .integer(let base) = change["baseRevision"], base == entry.revision,
-                                      case .integer(let revision) = change["revision"], let patches = change["patches"].arrayValue,
+                                      case .integer(let revision) = change["revision"], revision > base, let patches = change["patches"].arrayValue,
                                       (try? DesktopPatches.apply(patches, to: &state)) != nil {
                                 entry.state = state
                                 entry.revision = revision
