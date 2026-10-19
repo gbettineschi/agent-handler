@@ -35,8 +35,8 @@ Files: new DesktopApprovals.swift and DesktopApprovalTests.swift; DesktopAdapter
 ## Task 2: Native acceptance and remaining verification
 
 - [ ] Test a harmless real user-reviewed approval through the running app; confirm the source tool outcome and withdrawal, record what acknowledgment actually proves.
-- [ ] Test connection disable/re-enable and app restart with a real pending request. Verify only fresh state re-enables actions.
+- [x] Test connection disable/re-enable and app restart with a real pending request. Verify only fresh state re-enables actions. Answer arrival and withdrawal passed; the ledger closed without an exact accepted receipt. Source-host restart remains untested.
 - [ ] Retest a completed-turn question only with a fresh request; never resend the previously answered Blue request.
 - [x] Audit regular Chat's actual question protocol and Claude Desktop Chat/Cowork transports/hooks. If no external adapter contract can be established, document the precise missing interface and feasible compromises instead of shipping a fake integration.
 - [x] Record real sleep/wake/display/access restrictions honestly; do not interrupt unrelated tasks or fabricate live acceptance from fixtures.
-- [ ] Publish tested changes and exact evidence in compatibility/verification documentation.
+- [x] Publish tested changes and exact evidence in compatibility/verification documentation. Code/test commit `f119976` passed all 61 tests, bundle, demo and signature verification in CI run `39319407861`.

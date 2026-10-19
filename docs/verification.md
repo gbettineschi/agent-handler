@@ -2,7 +2,7 @@
 
 ## Automated checks
 
-On 2026-10-19, the expanded approval suite passed **61 tests across 12 suites locally** using `scripts/test.sh`. The previous 51-test question milestone passed macOS CI, as linked below; the expanded suite's CI result is recorded separately. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
+On 2026-10-19, the expanded approval suite passed **61 tests across 12 suites locally and in macOS CI** using `scripts/test.sh`. The suite uses temporary databases and real Unix sockets owned by synthetic hosts; it never sends answers to a user's agent.
 
 Coverage includes independent IDs, integer/string distinction, duplicate submissions, changed content, stale generations/revisions, scoped withdrawal, durable reservations, restart uncertainty, lost/mismatched receipts, owner changes, pre-send cancellation, revision gaps, frame fragmentation/limits, unknown stream versions, metadata discovery and panel geometry. Storage failure and Desktop's unset metadata flag were reproduced as failing regressions before fixing them.
 
@@ -13,6 +13,8 @@ Coverage includes independent IDs, integer/string distinction, duplicate submiss
 [GitHub verification run 39298108820](https://github.com/gbettineschi/agent-handler/actions/runs/39298108820), at code/test commit `17a668ae6bf194b318cc368835bb0c71f6bbd51d`, passed on the `macos-15` ARM64 runner with Swift 6.1.2. It ran all 45 tests, built the release app, ran the controller demo and verified the ad-hoc signature. Local verification used Swift 6.3.3.
 
 [GitHub verification run 39304238702](https://github.com/gbettineschi/agent-handler/actions/runs/39304238702), at code/test commit `46ea6e3326569147f412f6c8a548a05977a7a70f`, passed all 51 tests, the release build, controller demo and signature verification. Later documentation-only commits do not change the tested code.
+
+[GitHub verification run 39319407861](https://github.com/gbettineschi/agent-handler/actions/runs/39319407861), at code/test commit `f1199769c335637752e4a0fa90d2bec0cbee6bbf`, passed all 61 tests, the release build, controller demo and signature verification on `macos-15` with Swift 6.1.2. Local release signature verification and the controller demo also passed.
 
 The first CI runs exposed socket-fixture timeouts that did not reproduce locally. Each fixture's lifetime-long accept loop now owns a dedicated thread instead of occupying the shared dispatch pool. The subsequent CI run passed; shared-pool starvation is the suspected cause of the original failures, not a separately proven diagnosis. Test deadlines were not increased.
 
@@ -27,6 +29,8 @@ After the Mac was unlocked, computer-use tests passed for demo keyboard text ent
 The user explicitly delegated harmless native test answers to computer use. Two labeled test questions appeared together in Agent Handler. An option was selected and sent through its UI; the answer arrived in the source conversation and the second question remained. A fresh diagnostic controller with an empty in-memory ledger independently saw exactly one native pending question. Agent Handler was restarted, recovered that question, and submitted a typed free-text answer through its UI. That reply also arrived in the source conversation, the panel cleared, and a fresh native probe reported zero pending questions. The diagnostics never submitted answers.
 
 Direct source-app UI interaction was blocked by the computer tool's app-access restriction. Later, the user answered two visible question cards in the source conversation; Agent Handler then showed “Nothing needs your attention”. This verifies user-driven source-answer cleanup, without claiming that the computer tool clicked the source app. The × button was clicked successfully, Escape was checked, and collapsed launch was verified.
+
+After the approval expansion, a fresh harmless native question survived a restart into the latest release bundle. Launch was collapsed. Disabling the Desktop connection retained the card with its option, text field and Send button disabled. Re-enabling the connection restored the option after fresh source discovery. Computer use selected and sent the test answer; it arrived in the source conversation and the card cleared. An intermediate frame showed uncertain delivery. A read-only check of the latest ledger row showed `closed`, not `accepted`, so this verifies native answer arrival and authoritative withdrawal rather than exact receipt settlement. The panel was left collapsed. This tested Agent Handler's connection toggle and process restart; it did not quit or restart the source host.
 
 ## Long-conversation regression
 
