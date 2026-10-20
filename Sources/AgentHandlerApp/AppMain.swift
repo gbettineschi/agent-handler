@@ -35,7 +35,7 @@ import Combine
                 button.sendAction(on: [.leftMouseUp, .rightMouseUp])
                 panel?.anchor = button
             }
-            for (title, action, key) in [("Open Agent Handler", #selector(toggle), ""), ("Settings…", #selector(settings), ","), ("Quit Agent Handler", #selector(quit), "q")] {
+            for (title, action, key) in [("Open Agent Handler", #selector(openPanel), ""), ("Settings…", #selector(settings), ","), ("Quit Agent Handler", #selector(quit), "q")] {
                 let entry = NSMenuItem(title: title, action: action, keyEquivalent: key); entry.target = self; contextMenu.addItem(entry)
             }
             let main = NSMenu(), appMenu = NSMenuItem()
@@ -88,7 +88,7 @@ import Combine
             contextMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.minY), in: sender)
         } else { panel?.toggle() }
     }
-    @objc private func toggle() { panel?.toggle() }
+    @objc private func openPanel() { panel?.show() }
     @objc private func settings() { panel?.showSettings() }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func screenChanged() { panel?.refresh() }

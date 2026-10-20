@@ -54,6 +54,17 @@ struct SessionLifecycle: Codable {
               let index = records.firstIndex(where: { $0.scope == session.id && $0.turn == session.turnID }) else { return }
         records[index].dismissed = true
     }
+    @discardableResult mutating func restoreDismissed(_ session: SessionSummary) -> Bool {
+        guard session.isFinished,
+              let index = records.firstIndex(where: { $0.scope == session.id && $0.turn == session.turnID && $0.dismissed }) else { return false }
+        records[index].dismissed = false
+        return true
+    }
+    func hidden(_ sessions: [SessionSummary]) -> [SessionSummary] {
+        sessions.filter { session in
+            session.isFinished && records.contains { $0.scope == session.id && $0.turn == session.turnID && $0.dismissed }
+        }
+    }
     func visible(_ sessions: [SessionSummary]) -> [SessionSummary] {
         sessions.compactMap { session in
             guard let record = records.first(where: { $0.scope == session.id && $0.turn == session.turnID }) else { return session }
@@ -96,5 +107,16 @@ struct MenuBarState {
         default: prefix = "Agent Handler"
         }
         return "\(prefix). \(working) working, \(needsInput) need input, \(recent) finished in the last five minutes."
+    }
+}
+
+struct SessionDismissal {
+    let session: SessionSummary
+    let expiresAt: Date
+    init(session: SessionSummary, now: Date) {
+        self.session = session; expiresAt = now.addingTimeInterval(10)
+    }
+    func canUndo(in sessions: [SessionSummary], now: Date) -> Bool {
+        now < expiresAt && sessions.contains { $0.id == session.id && $0.turnID == session.turnID && $0.isFinished }
     }
 }

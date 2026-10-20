@@ -22,6 +22,7 @@ import ClaudeDesktopAdapter
     @Published var showSessions = true
     @Published var demoScenario: DemoScenario = .questions
     @Published var recentConversationIDs: [String] = []
+    @Published private(set) var dismissal: SessionDismissal?
     @Published private(set) var sessionClock = Date()
     private var lifecycle = SessionLifecycle()
     private var presentationTimer: Task<Void, Never>?
@@ -29,6 +30,7 @@ import ClaudeDesktopAdapter
     private var observedSessions: [SessionSummary] {
         SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs)
     }
+    var hiddenSessions: [SessionSummary] { lifecycle.hidden(observedSessions) }
     var sessions: [SessionSummary] { lifecycle.visible(observedSessions) }
     var menuBarState: MenuBarState {
         MenuBarState(sessions: sessions, now: sessionClock, enabled: enabled,
@@ -36,12 +38,31 @@ import ClaudeDesktopAdapter
     }
     func updateSessionPresentation(now: Date = Date()) {
         lifecycle.observe(observedSessions, now: now)
+        if let dismissal, !dismissal.canUndo(in: observedSessions, now: now) { self.dismissal = nil }
         sessionClock = now
         persistLifecycle()
         attentionChanged?()
     }
     func dismissSession(_ session: SessionSummary) {
+        guard session.isFinished else { return }
         lifecycle.dismiss(session)
+        dismissal = SessionDismissal(session: session, now: Date())
+        sessionClock = Date()
+        persistLifecycle()
+        attentionChanged?()
+    }
+    func restoreSession(_ session: SessionSummary) {
+        guard observedSessions.contains(where: { $0.id == session.id && $0.turnID == session.turnID && $0.isFinished }),
+              lifecycle.restoreDismissed(session) else { return }
+        if dismissal?.session.id == session.id, dismissal?.session.turnID == session.turnID { dismissal = nil }
+        sessionClock = Date()
+        persistLifecycle()
+        attentionChanged?()
+    }
+    func undoDismissal() {
+        defer { dismissal = nil }
+        guard let dismissal, dismissal.canUndo(in: observedSessions, now: Date()) else { return }
+        lifecycle.restoreDismissed(dismissal.session)
         sessionClock = Date()
         persistLifecycle()
         attentionChanged?()
@@ -208,6 +229,7 @@ import ClaudeDesktopAdapter
     }
     func loadDemo(_ scenario: DemoScenario? = nil) async {
         guard demo else { return }
+        lifecycle = SessionLifecycle(); dismissal = nil
         let generation = UUID(); demoGeneration = generation
         if let scenario { demoScenario = scenario }
         let scenario = demoScenario

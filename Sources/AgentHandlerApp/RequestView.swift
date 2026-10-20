@@ -54,6 +54,17 @@ struct HandlerPanelView: View {
                             model.showSessions = false
                         }
                     } else { emptyState }
+                    if let dismissal = model.dismissal, model.showSessions {
+                        HStack(spacing: 8) {
+                            Text("Hidden: \(dismissal.session.title)").lineLimit(1).truncationMode(.middle)
+                                .foregroundStyle(.secondary).help(dismissal.session.title)
+                            Spacer(minLength: 4)
+                            Button("Undo", action: model.undoDismissal)
+                                .buttonStyle(.borderless).keyboardShortcut("z", modifiers: .command)
+                                .help("Restore this finished session (⌘Z)")
+                        }.font(.caption).padding(.horizontal, 16).padding(.vertical, 10)
+                            .overlay(alignment: .top) { Divider() }
+                    }
                     if model.demo { footer }
                 }
             }
@@ -91,12 +102,23 @@ struct HandlerPanelView: View {
             if model.demo { Text("DEMO").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
             Spacer(minLength: 0)
             if expanded {
+                if !model.hiddenSessions.isEmpty {
+                    Menu {
+                        ForEach(model.hiddenSessions) { session in
+                            Button(session.title) { model.restoreSession(session) }
+                        }
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath").font(.system(size: 12))
+                            .frame(width: 28, height: 28)
+                    }.menuStyle(.borderlessButton).fixedSize()
+                        .accessibilityLabel("Restore hidden sessions").help("Restore a hidden finished session")
+                }
                 if !model.requests.isEmpty {
                     Text("\(model.requests.count)").monospacedDigit().font(.caption.weight(.semibold))
                         .padding(.horizontal, 7).padding(.vertical, 3).background(.orange.opacity(0.16), in: Capsule())
-                        .foregroundStyle(.orange).accessibilityLabel("\(model.requests.count) \(model.requests.count == 1 ? "request needs" : "requests need") attention")
+                        .foregroundStyle(.orange).help("Requests needing attention; the menu-bar number also includes working and recently finished sessions.").accessibilityLabel("\(model.requests.count) \(model.requests.count == 1 ? "request needs" : "requests need") attention")
                 }
-                PanelIconButton(title: model.showSettings ? "Back to requests" : "Settings", symbol: model.showSettings ? "arrow.left" : "gearshape") {
+                PanelIconButton(title: model.showSettings ? (model.showSessions ? "Back to sessions" : "Back to question") : "Settings", symbol: model.showSettings ? "arrow.left" : "gearshape") {
                     model.showSettings.toggle()
                 }.keyboardShortcut(",", modifiers: .command)
                 PanelIconButton(title: "Close panel (Escape)", symbol: "xmark", action: collapse)
@@ -134,10 +156,10 @@ struct HandlerPanelView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            Image(systemName: model.enabled ? "checkmark.circle" : "pause.circle")
+            Image(systemName: !model.enabled ? "pause.circle" : model.connectedConversations == 0 && !model.demo ? "desktopcomputer" : "tray")
                 .font(.system(size: 25, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
-            Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Desktop for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Desktop" : "No pending requests").font(.headline)
-            Text(model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Settings if it stays unavailable." : "Sessions appear here as they become available.")
+            Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Desktop for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Desktop" : "No sessions to show").font(.headline)
+            Text(model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Settings if it stays unavailable." : "New activity will appear automatically.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
     }

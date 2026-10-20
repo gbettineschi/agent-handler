@@ -26,6 +26,12 @@ import AgentHandlerCore
             ("unavailable", .unavailable, 420, 400, true, false, false),
             ("uncertain", .uncertain, 420, 480, true, false, false),
             ("sessions", .empty, 420, 400, true, false, false),
+            ("sessions-narrow", .empty, 340, 400, true, false, false),
+            ("sessions-long-titles", .empty, 420, 400, true, false, false),
+            ("sessions-countdown", .empty, 420, 400, true, false, false),
+            ("sessions-undo", .empty, 420, 400, true, false, false),
+            ("sessions-many", .empty, 420, 400, true, false, false),
+            ("empty", .empty, 420, 260, true, false, false),
             ("settings", .questions, 420, 480, true, true, false),
             ("appearance-high-contrast", .questions, 420, 400, true, false, true)
         ]
@@ -38,6 +44,41 @@ import AgentHandlerCore
             if scenario == .unavailable { precondition(model.requests.allSatisfy { $0.state == .unavailable }) }
             if scenario == .uncertain { precondition(model.requests.count == 1 && model.requests[0].state == .uncertain) }
             if scenario == .empty { precondition(model.requests.isEmpty && model.sessions.count == 3) }
+            if name == "sessions-long-titles" {
+                for activity in model.activities {
+                    model.titles[activity.id.conversation] = "A long conversation title — review the implementation, check the remaining details and prepare the next release"
+                }
+            }
+            if name == "sessions-countdown" {
+                let completed = model.activities
+                var running = ActivityStore()
+                for activity in completed {
+                    let epoch = running.begin(scope: activity.id)
+                    running.observe(.init(scope: activity.id, epoch: epoch, revision: 1, turnID: activity.turnID, phase: .running, attention: .clear))
+                }
+                model.activities = running.views; model.updateSessionPresentation()
+                model.activities = completed; model.updateSessionPresentation()
+                precondition(model.sessions.contains { $0.recentUntil != nil })
+            }
+            if name == "sessions-undo", let finished = model.sessions.first(where: \.isFinished) {
+                model.dismissSession(finished)
+                precondition(model.dismissal != nil && model.sessions.count == 2)
+            }
+            if name == "sessions-many" {
+                var activity = ActivityStore()
+                for index in 1...16 {
+                    let scope = RequestScope(installation: "demo", conversation: "visual-\(index)")
+                    let epoch = activity.begin(scope: scope)
+                    activity.observe(.init(scope: scope, epoch: epoch, revision: 1, turnID: "turn", phase: index < 5 ? .running : .completed, attention: .clear))
+                    model.titles[scope.conversation] = "Example session \(index)"
+                }
+                model.activities = activity.views; model.updateSessionPresentation()
+                precondition(model.sessions.count == 16)
+            }
+            if name == "empty" {
+                model.activities = []; model.requests = []; model.updateSessionPresentation()
+                precondition(model.sessions.isEmpty)
+            }
             let presentation = PanelPresentation()
             presentation.expanded = expanded
             let root = HandlerPanelView(model: model, presentation: presentation, collapse: {})

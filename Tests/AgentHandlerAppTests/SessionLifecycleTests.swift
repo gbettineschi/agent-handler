@@ -72,6 +72,62 @@ struct SessionLifecycleTests {
         reopened.observe([row(.completed, turn: "b")], now: now.addingTimeInterval(500))
         #expect(reopened.visible([row(.completed, turn: "b")]).first?.recentUntil == nil)
     }
+    @Test func undoRestoresOnlyTheDismissedTurnWithoutExtendingItsCountdown() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        var lifecycle = SessionLifecycle()
+        lifecycle.observe([row(.running)], now: now)
+        lifecycle.observe([row(.completed)], now: now.addingTimeInterval(10))
+        lifecycle.dismiss(row(.completed))
+        #expect(lifecycle.visible([row(.completed)]).isEmpty)
+        let restored = lifecycle.restoreDismissed(row(.completed))
+        #expect(restored)
+        #expect(lifecycle.visible([row(.completed)]).first?.recentUntil == now.addingTimeInterval(310))
+        let restoredAgain = lifecycle.restoreDismissed(row(.completed))
+        #expect(!restoredAgain)
+    }
+    @Test func undoOldTurnCannotUnhideANewerDismissedFinish() {
+        let now = Date()
+        var lifecycle = SessionLifecycle()
+        lifecycle.observe([row(.completed)], now: now)
+        lifecycle.dismiss(row(.completed))
+        lifecycle.observe([row(.running, turn: "b")], now: now)
+        lifecycle.observe([row(.completed, turn: "b")], now: now)
+        lifecycle.dismiss(row(.completed, turn: "b"))
+        let restoredAgain = lifecycle.restoreDismissed(row(.completed))
+        #expect(!restoredAgain)
+        #expect(lifecycle.visible([row(.completed, turn: "b")]).isEmpty)
+    }
+    @Test func undoOfferExpiresAndWithdrawsWhenWorkRestarts() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let offer = SessionDismissal(session: row(.completed), now: now)
+        #expect(offer.canUndo(in: [row(.completed)], now: now.addingTimeInterval(9)))
+        #expect(!offer.canUndo(in: [row(.completed)], now: now.addingTimeInterval(10)))
+        #expect(!offer.canUndo(in: [row(.running)], now: now))
+        #expect(!offer.canUndo(in: [row(.completed, turn: "b")], now: now))
+        #expect(!offer.canUndo(in: [row(.unknown)], now: now))
+    }
+    @Test @MainActor func resettingDemoRestoresDismissedExamplesAndClearsUndo() async throws {
+        let model = try AppModel(demo: true)
+        await model.loadDemo(.empty)
+        model.updateSessionPresentation()
+        let candidate = model.sessions.first { $0.isFinished }
+        let finished = try #require(candidate)
+        model.dismissSession(finished)
+        #expect(model.sessions.count == 2)
+        #expect(model.dismissal != nil)
+        await model.loadDemo(.empty)
+        model.updateSessionPresentation()
+        #expect(model.sessions.count == 3)
+        #expect(model.dismissal == nil)
+    }
+    @Test func hiddenSessionsAreRecoverableButDoNotIncludeActiveOrUnknownState() {
+        var lifecycle = SessionLifecycle()
+        lifecycle.observe([row(.completed)], now: Date())
+        lifecycle.dismiss(row(.completed))
+        #expect(lifecycle.hidden([row(.completed)]).map(\.title) == ["Actual chat title"])
+        #expect(lifecycle.hidden([row(.running), row(.unknown)]).isEmpty)
+        #expect(lifecycle.hidden([row(.completed, turn: "b")]).isEmpty)
+    }
     @Test func attentionAndUnknownAreNotReportedAsSuccess() {
         let now = Date()
         #expect(MenuBarState(sessions: [row(.needsInput), row(.running, turn: "b")], now: now).mode == .attention)

@@ -24,7 +24,7 @@ The [Open Vibe Island panel](https://github.com/Octane0411/open-vibe-island/blob
 
 ## Repeatable visual checks
 
-Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Nine panel cases assert logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
+Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Fifteen panel cases assert logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
 
 | State | Preview |
 | --- | --- |
@@ -34,6 +34,9 @@ Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real control
 | Unavailable | [Image](images/ui/unavailable.png) |
 | Uncertain delivery, no resend | [Image](images/ui/uncertain.png) |
 | Sessions without requests, dismiss controls | [Image](images/ui/sessions.png) |
+| Narrow and long titles | [Narrow](images/ui/sessions-narrow.png), [long titles](images/ui/sessions-long-titles.png) |
+| Countdown and Undo | [Countdown](images/ui/sessions-countdown.png), [Undo](images/ui/sessions-undo.png) |
+| Sixteen sessions and empty | [Many](images/ui/sessions-many.png), [empty](images/ui/empty.png) |
 | Settings | [Image](images/ui/settings.png) |
 | High-contrast window appearance | [Image](images/ui/appearance-high-contrast.png) |
 
@@ -43,4 +46,12 @@ All examples are synthetic and marked DEMO. The live app launches without `--dem
 
 The live release showed actual native chat titles after fixing the metadata-title mismatch. A labeled native question was opened from its session row; keyboard text entry and Command-Return delivered the answer to the source conversation, and the test card cleared while the unrelated question remained. An intermediate uncertain state was visible; no automatic resend occurred. This confirms arrival and withdrawal, not a separately captured exact native receipt.
 
-Command-comma opens Settings. With macOS Keyboard Navigation temporarily enabled, Tab and Shift-Tab traversed controls and showed the focus outline; the original off preference was restored. Native accessibility inspection found named headings, buttons, answer fields, session titles and state labels. System Increase Contrast was enabled temporarily; the live list remained readable and contrast/transparency were both restored. VoiceOver was briefly enabled, but the computer tool could not expose its caption or cursor output; it was restored to off without claiming spoken-output acceptance. Temporary native lifecycle tracing verified Escape and × both make the window invisible. The computer inspection tool then sends an app-reopen event, which explained why observation appeared to undo the close; the tracing was removed and committed sources restored. Physical menu-bar/Ice reveal and a live finished-row dismissal remain to be recorded separately. Provider approval and Claude acceptance gaps remain in [verification](verification.md).
+Command-comma opens Settings. With macOS Keyboard Navigation temporarily enabled, Tab and Shift-Tab traversed controls and showed the focus outline; the original off preference was restored. Native inspection found named headings, buttons, answer fields, session titles and state labels. System Increase Contrast was enabled temporarily; the live list remained readable and contrast/transparency were both restored. VoiceOver was briefly enabled, but the computer tool could not expose its caption or cursor output; it was restored to off without claiming spoken-output acceptance. Temporary native lifecycle tracing verified Escape and × both make the window invisible. The computer inspection tool then sends an app-reopen event, which explained why observation appeared to undo the close; the tracing was removed and committed sources restored. The user confirmed the robot is visible in Ice and clicking opens the panel. Physical finished-row dismissal/reappearance is not inferred from the synthetic tests. Provider approval and Claude acceptance gaps remain in [verification](verification.md).
+
+## Detail polish
+
+Chat titles now take the full row width, with compact source/status/countdown underneath. Actionable rows have restrained hover/press feedback; focus has a single outline. The latest-first ordering stays intact. Settings text is shorter, empty state avoids implying that an unknown job succeeded, the Open command always opens, and an already visible panel does not repeat its fade.
+
+Hide has a ten-second Undo available only on the sessions route, so Command-Z cannot capture answer-field editing. The restore menu recovers individual hidden finished rows after that offer expires. Both use exact source/turn identity and preserve the original countdown. A real hidden Job tracker row was restored through this menu while the other pre-existing hidden session was left hidden. Native list-row inspection alone does not establish that the × hit target was exercised successfully.
+
+The expanded matrix adds narrow sessions, long titles, countdowns, Undo, sixteen sessions and a fully empty panel. Demo reset now clears its own dismissal state between examples. The full local suite passes 133 tests. VoiceOver is out of scope at the user's request.

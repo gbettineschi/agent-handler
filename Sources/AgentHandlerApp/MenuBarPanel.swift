@@ -67,12 +67,14 @@ final class AttentionPanel: NSPanel {
         visibilityChanged?(false)
     }
     func show() {
+        let wasVisible = panel.isVisible
         presentation.expanded = true
         place()
         panel.contentView?.window?.recalculateKeyViewLoop()
-        panel.alphaValue = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
+        panel.alphaValue = wasVisible || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
         panel.makeKeyAndOrderFront(nil)
         visibilityChanged?(true)
+        guard !wasVisible else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12
             panel.animator().alphaValue = 1
