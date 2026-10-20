@@ -21,8 +21,15 @@ struct PanelIconButton: View {
     }
 }
 
-extension NSScreen {
-    var handlerDisplayID: String {
-        String(describing: deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? "")
+private struct HandlerFocusRing: ViewModifier {
+    @FocusState private var focused: Bool
+    func body(content: Content) -> some View {
+        content.focused($focused).overlay {
+            RoundedRectangle(cornerRadius: 10).strokeBorder(focused ? Color.accentColor : .clear, lineWidth: 2)
+                .allowsHitTesting(false)
+        }
     }
+}
+extension View {
+    func handlerFocusRing() -> some View { modifier(HandlerFocusRing()) }
 }

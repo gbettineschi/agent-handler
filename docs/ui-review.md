@@ -1,27 +1,46 @@
-# Interface review
+# Menu-bar interface review
 
-The panel uses system typography, SF Symbols, explicit permission actions and a compact collapsed state. Sessions show the latest known status even when no question or approval is pending. “All sessions” returns from an input card to the list. Connection details live in Settings rather than a tracking-count footer.
+The floating notch pill has been removed. A native NSStatusItem opens a bounded panel under its actual button. A hidden/offscreen Ice anchor is clamped to the display; reopening the app bundle provides a way to reach the panel before revealing the item. No hover expansion or incoming-request auto-open is used. The selected menu-bar item stays highlighted while its panel is open.
 
-## Synthetic render matrix
+## States and count
 
-Run `bash scripts/render-ui.sh` on macOS. The helper creates unshown windows, uses an in-memory demo controller and never connects to an agent. It checks fixture states and exact logical dimensions; images are inspected manually. It does not compare pixels to a golden baseline.
+| State | Menu-bar treatment |
+| --- | --- |
+| Working | Original monochrome agent glyph, subtle four-frame motion at 4 fps |
+| Question or approval | Exclamation badge; working sessions can still animate |
+| Unknown/disconnected source | Question-mark badge; never presented as success |
+| Failed | Cross badge and labeled failure in the list |
+| Recently finished | Check badge when no higher-priority state exists |
+| Paused | Pause badge |
+| Idle | Still agent glyph and zero |
+
+The number counts active sessions plus observed finishes younger than 300 seconds, once per session. Finished rows show the remaining countdown and remain in the list after the number expires. Their × hides only that finished turn; subscriptions continue, and new/resumed activity or unresolved input becomes visible again. Dismissals and finish times survive app restart. Launch-history completions do not receive a fresh countdown; the initial baseline includes explicit and pinned subscriptions as well as discovered chats. A newly discovered finished chat after that baseline can enter the count.
+
+Reduce Motion stops both glyph motion and the short opening fade. The window has one animation owner and never combines a window resize animation with a SwiftUI spring. Exact approval choices remain multiline buttons without a default keyboard action.
+
+## References inspected
+
+The [Open Vibe Island panel](https://github.com/Octane0411/open-vibe-island/blob/01aa0924fd96bf319a64e75646765c55cae4e2c5/Sources/OpenIslandApp/Views/IslandPanelView.swift) and [window controller](https://github.com/Octane0411/open-vibe-island/blob/01aa0924fd96bf319a64e75646765c55cae4e2c5/Sources/OpenIslandApp/OverlayPanelController.swift) demonstrate state-driven surfaces and explain why mixing AppKit and SwiftUI size animations caused jank. Notchi's SessionSpriteView at local checkout `e6f8b8a805cec31b5d3844d2ea8faa7a836ebc7e` shows pausing motion under Reduce Motion. No sprites, artwork or UI code from these references were copied. The menu-bar glyph is original template artwork. Apple's [menu-bar guidance](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar), [motion](https://developer.apple.com/design/human-interface-guidelines/motion) and [accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) inform the restrained behavior, system tint, explicit actions and labeled states.
+
+## Repeatable visual checks
+
+Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Nine panel cases assert logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
 
 | State | Preview |
 | --- | --- |
 | Question | [Image](images/ui/question.png) |
-| Approval with exact wrapping rule label | [Image](images/ui/approval.png) |
-| Long question and narrow layout | [Standard](images/ui/long-content.png), [narrow](images/ui/long-narrow.png) |
-| Unavailable source | [Image](images/ui/unavailable.png) |
+| Exact wrapping approval rule | [Image](images/ui/approval.png) |
+| Long question | [Standard](images/ui/long-content.png), [narrow](images/ui/long-narrow.png) |
+| Unavailable | [Image](images/ui/unavailable.png) |
 | Uncertain delivery, no resend | [Image](images/ui/uncertain.png) |
-| Sessions without requests | [Image](images/ui/sessions.png) |
+| Sessions without requests, dismiss controls | [Image](images/ui/sessions.png) |
 | Settings | [Image](images/ui/settings.png) |
 | High-contrast window appearance | [Image](images/ui/appearance-high-contrast.png) |
-| Collapsed | [Image](images/ui/collapsed.png) |
 
-All examples are synthetic and marked DEMO. Their answers contact no agent. The live app launches without `--demo`. High-contrast NSAppearance is a window-level fixture; it does not verify the system Increase Contrast setting.
+All examples are synthetic and marked DEMO. The live app launches without `--demo`. High-contrast NSAppearance does not establish system Increase Contrast acceptance.
 
-## Verified and pending
+## Live checks
 
-The 120-test local suite includes session recency, stale activity, provider identity and pending-input priority. Native demo tests checked question selection, Command-Return and no-request sessions. The render matrix checks bounded sizing, wrapping and disabled unavailable/uncertain actions. Independent source review found no remaining Important issues.
+The live release showed actual native chat titles after fixing the metadata-title mismatch. A labeled native question was opened from its session row; keyboard text entry and Command-Return delivered the answer to the source conversation, and the test card cleared while the unrelated question remained. An intermediate uncertain state was visible; no automatic resend occurred. This confirms arrival and withdrawal, not a separately captured exact native receipt.
 
-VoiceOver, full keyboard traversal, real outside-click dismissal and multiple displays remain manual checks. The user was actively using the Mac, so further visible automation was stopped. No native approval result is inferred from these demos. Backend acceptance gaps remain recorded in [verification](verification.md).
+Command-comma opens Settings. With macOS Keyboard Navigation temporarily enabled, Tab and Shift-Tab traversed controls and showed the focus outline; the original off preference was restored. Native accessibility inspection found named headings, buttons, answer fields, session titles and state labels. System Increase Contrast was enabled temporarily; the live list remained readable and contrast/transparency were both restored. VoiceOver was briefly enabled, but the computer tool could not expose its caption or cursor output; it was restored to off without claiming spoken-output acceptance. Physical menu-bar/Ice reveal, the final click/close interaction and a live finished-row dismissal remain to be recorded separately. Provider approval and Claude acceptance gaps remain in [verification](verification.md).

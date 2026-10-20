@@ -9,13 +9,15 @@ final class AttentionPanel: NSPanel {
     override func performClose(_ sender: Any?) { dismiss?() }
 }
 
-@MainActor final class NotchPanel: NSObject {
+@MainActor final class MenuBarPanel: NSObject {
     private let panel: AttentionPanel
     private let model: AppModel
     private let presentation = PanelPresentation()
     private var observations = Set<AnyCancellable>()
     private var eventMonitors: [Any] = []
     private var menuTracking = false
+    var visibilityChanged: ((Bool) -> Void)?
+    weak var anchor: NSStatusBarButton?
     init(model: AppModel) {
         self.model = model
         panel = AttentionPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -29,7 +31,7 @@ final class AttentionPanel: NSPanel {
         panel.dismiss = { [weak self] in self?.collapse() }
         // A stable hosting tree preserves drafts while the window is collapsed.
         let host = NSHostingView(rootView: HandlerPanelView(model: model, presentation: presentation,
-            toggle: { [weak self] in self?.toggle() }, collapse: { [weak self] in self?.collapse() }))
+            collapse: { [weak self] in self?.collapse() }))
         // PanelPlacement owns window dimensions. Intrinsic-size propagation can
         // otherwise make a scrollable error state expand the window itself.
         host.sizingOptions = []
@@ -48,23 +50,35 @@ final class AttentionPanel: NSPanel {
         }) { eventMonitors.append(monitor) }
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
             MainActor.assumeIsolated {
-                guard let self, event.window !== self.panel else { return }
+                guard let self, event.window !== self.panel, event.window !== self.anchor?.window else { return }
                 self.dismissIfOutside(event)
             }
             return event
         }) { eventMonitors.append(monitor) }
-        place()
     }
     func toggle() {
         if presentation.expanded { collapse() }
-        else { presentation.expanded = true; place(); panel.makeKeyAndOrderFront(nil) }
+        else { show() }
     }
     private func collapse() {
         guard presentation.expanded else { return }
         presentation.expanded = false; model.showSettings = false
-        panel.resignKey(); place()
+        panel.resignKey(); panel.orderOut(nil)
+        visibilityChanged?(false)
     }
-    func showSettings() { presentation.expanded = true; model.showSettings = true; place(); panel.makeKeyAndOrderFront(nil) }
+    func show() {
+        presentation.expanded = true
+        place()
+        panel.contentView?.window?.recalculateKeyViewLoop()
+        panel.alphaValue = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
+        panel.makeKeyAndOrderFront(nil)
+        visibilityChanged?(true)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12
+            panel.animator().alphaValue = 1
+        }
+    }
+    func showSettings() { model.showSettings = true; show() }
     func refresh() { place() }
     private func dismissIfOutside(_ event: NSEvent) {
         let point = event.window?.convertPoint(toScreen: event.locationInWindow) ?? event.locationInWindow
@@ -74,14 +88,15 @@ final class AttentionPanel: NSPanel {
     @objc private func menuBegan() { menuTracking = true }
     @objc private func menuEnded() { menuTracking = false }
     private func place() {
-        let screen = NSScreen.screens.first { $0.handlerDisplayID == model.displayID } ?? NSScreen.main ?? NSScreen.screens.first
+        guard presentation.expanded else { return }
+        let anchorRect = anchor.flatMap { button in button.window.map { $0.convertToScreen(button.convert(button.bounds, to: nil)) } }
+        let screen = anchor?.window?.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let approval: Bool
         if let content = model.displayedRequest?.request.content, case .approval = content { approval = true } else { approval = false }
         let height: CGFloat = model.showSettings || approval ? 480 : (model.requests.isEmpty && model.sessions.isEmpty ? 260 : 400)
-        panel.setFrame(PanelPlacement.frame(screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top,
-                                           expanded: presentation.expanded, contentHeight: height), display: true)
-        panel.orderFrontRegardless()
+        let frame = PanelPlacement.menuFrame(visible: screen.visibleFrame, anchor: anchorRect, contentHeight: height)
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
     }
 }
 

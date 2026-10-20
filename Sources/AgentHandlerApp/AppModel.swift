@@ -19,14 +19,41 @@ import ClaudeDesktopAdapter
     @Published var issue: String?
     @Published var showSettings = false
     @Published var selectedRequestID: RequestKey?
+    @Published var showSessions = true
     @Published var demoScenario: DemoScenario = .questions
     @Published var recentConversationIDs: [String] = []
-    var sessions: [SessionSummary] {
+    @Published private(set) var sessionClock = Date()
+    private var lifecycle = SessionLifecycle()
+    private var presentationTimer: Task<Void, Never>?
+    private var savedLifecycle: Data?
+    private var observedSessions: [SessionSummary] {
         SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs)
+    }
+    var sessions: [SessionSummary] { lifecycle.visible(observedSessions) }
+    var menuBarState: MenuBarState {
+        MenuBarState(sessions: sessions, now: sessionClock, enabled: enabled,
+                     warning: issue != nil || trackingWarning != nil || needsSourceApproval)
+    }
+    func updateSessionPresentation(now: Date = Date()) {
+        lifecycle.observe(observedSessions, now: now)
+        sessionClock = now
+        persistLifecycle()
+        attentionChanged?()
+    }
+    func dismissSession(_ session: SessionSummary) {
+        lifecycle.dismiss(session)
+        sessionClock = Date()
+        persistLifecycle()
+        attentionChanged?()
+    }
+    private func persistLifecycle() {
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        guard !demo, let data = try? encoder.encode(lifecycle), data != savedLifecycle else { return }
+        UserDefaults.standard.set(data, forKey: "sessionPresentation.v1")
+        savedLifecycle = data
     }
     var displayedRequest: RequestView? { requests.first { $0.id == selectedRequestID } ?? SessionSummary.preferredRequest(requests) }
     @Published var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: "desktopEnabled"); Task { await reconfigure() } } }
-    @Published var displayID: String { didSet { UserDefaults.standard.set(displayID, forKey: "displayID"); placementChanged?() } }
     @Published var extraThreads: String { didSet { UserDefaults.standard.set(extraThreads, forKey: "extraThreads"); lastDiscovery = 0 } }
     @Published var loginEnabled = SMAppService.mainApp.status == .enabled
     let demo: Bool
@@ -45,7 +72,7 @@ import ClaudeDesktopAdapter
     private var refreshingDiscovery = false
     private var discoveryWarning: String?
     private var demoGeneration = UUID()
-    var placementChanged: (() -> Void)?
+    private var ownerTitles: [String: String] = [:]
     var attentionChanged: (() -> Void)?
 
     init(demo: Bool) throws {
@@ -64,16 +91,25 @@ import ClaudeDesktopAdapter
         core = RequestController(ledger: ledger)
         adapter = DesktopAdapter(directory: directory, controller: core)
         enabled = UserDefaults.standard.object(forKey: "desktopEnabled") as? Bool ?? true
-        displayID = UserDefaults.standard.string(forKey: "displayID") ?? "automatic"
         extraThreads = UserDefaults.standard.string(forKey: "extraThreads") ?? ""
     }
 
     func start() {
+        if !demo, let data = UserDefaults.standard.data(forKey: "sessionPresentation.v1"),
+           let restored = try? JSONDecoder().decode(SessionLifecycle.self, from: data) {
+            lifecycle = restored; savedLifecycle = data
+        }
+        presentationTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.updateSessionPresentation()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
         watching = Task { [weak self, core] in
             for await views in await core.updates() {
                 guard let self, !Task.isCancelled else { return }
                 requests = views.filter(\.needsAttention)
-                attentionChanged?()
+                updateSessionPresentation()
             }
         }
         if demo { Task { await loadDemo() }; return }
@@ -136,6 +172,7 @@ import ClaudeDesktopAdapter
             switch result {
             case .success(let values):
                 candidates = values; titles = Dictionary(values.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+                    .merging(ownerTitles, uniquingKeysWith: { _, native in native })
                 recentConversationIDs = values.map(\.id)
                 discoveryWarning = nil
             case .failure:
@@ -145,6 +182,7 @@ import ClaudeDesktopAdapter
             let explicit = extraThreads.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.utf8.count <= 256 }
             var selected: [String] = []
             for id in pinned + explicit + candidates.map(\.id) where !selected.contains(id) && selected.count < 16 { selected.append(id) }
+            lifecycle.establishBaseline(conversations: Set(selected + candidates.map(\.id)))
             await adapter.start(threadIDs: Set(selected))
         }
         let state = await adapter.health()
@@ -152,7 +190,12 @@ import ClaudeDesktopAdapter
         connectedConversations = state.known; selectedConversations = state.followed; connectionChecked = true
         needsSourceApproval = state.needsSourceApproval
         activities = await adapter.activity()
+        ownerTitles.merge(await adapter.conversationTitles(), uniquingKeysWith: { _, native in native })
+        let retained = Set(recentConversationIDs + activities.map { $0.id.conversation } + requests.map { $0.id.scope.conversation })
+        ownerTitles = ownerTitles.filter { retained.contains($0.key) }
+        titles.merge(ownerTitles, uniquingKeysWith: { _, native in native })
         health = [discoveryWarning, state.message, await claude.health()].compactMap { $0 }.joined(separator: "\n")
+        updateSessionPresentation()
         if await core.persistenceFailed { issue = "Responses disabled: delivery tracking is unavailable. Use the source app." }
     }
 

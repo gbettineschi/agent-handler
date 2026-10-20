@@ -1,6 +1,6 @@
 # Agent Handler
 
-A small native macOS companion for agent questions, built around an independent request controller and a minimal notch interface.
+A small native macOS companion for agent questions, built around an independent request controller and a compact menu-bar interface.
 
 **Development build.** Native Codex/ChatGPT Work questions, one real app-approval flow, and a live shell Allow through Agent Handler have passed. Shell deny/cancel and browser-origin approvals still need native acceptance tests. Work turn activity is tracked; regular ChatGPT Chat is deferred. A read-only Claude local-audit observer is implemented and fixture-tested, but a fresh native Claude turn remains unverified and Claude response delivery is not implemented. Cloud-only Claude chats without local audits are unsupported. The Desktop adapter uses private IPC and can require maintenance after host updates. See the [coverage audit](docs/surface-audit.md) and [verification record](docs/verification.md).
 
@@ -22,7 +22,11 @@ Quit the demo from the **Agent Handler menu-bar icon** before starting the live 
 open "dist/Agent Handler.app"
 ```
 
-The app starts collapsed and remains available through the **Agent Handler menu-bar icon**. A compact top-center pill shows pending requests or working conversations, including on external displays. Click it to expand. Close the panel with its × button, Escape, or a click outside; pending requests and unfinished drafts remain in the queue. Incoming requests update the pill without expanding it or taking keyboard focus. The sessions view remains available with no pending requests and shows each observed session’s latest known turn status; the live panel has no tracking-count footer. Questions support Command-Return to send; approvals require an explicit button action. Settings select a display, enable the Desktop connection and expose connection details and additional conversation IDs. Approval scopes retain their exact source labels and wrap instead of truncating. Permission buttons have no default keyboard shortcut. Use `--show` only when you explicitly want an expanded launch.
+The app starts with a native **menu-bar agent icon** and no floating pill. Click the icon to open its panel; Control-click or right-click for commands. Escape, × or an outside click closes the panel. Questions support Command-Return to send; permissions require an explicit button action. Incoming requests never open the panel or take focus. Reopening the app bundle also opens its panel, which is useful while Ice hides its menu-bar item.
+
+The original monochrome agent glyph moves while a session is working and stays still otherwise. Reduce Motion stops the animation and panel fade. Shape badges distinguish attention, unavailable state, failure, recent completion and paused tracking. The number includes active sessions and finishes observed in the last five minutes, counted once per session. A countdown appears on recent finished rows; when it expires the row remains, but drops out of the count. Existing completions at launch are not replayed as new finishes.
+
+Finished rows have an × to dismiss that turn. Observation continues, so a new turn, resumed work or unresolved input brings the session back. Current chat titles come from the verified native owner stream, with discovery metadata as a fallback. Settings contains connection details, launch at login and additional conversation IDs. Tab/Shift-Tab navigation follows the macOS Keyboard Navigation preference.
 
 The live adapter observes at most 16 recent local conversations, prioritizing already-pending requests and explicitly selected IDs. Local metadata supplies candidates; only a verified owner stream makes a question actionable. Discovery uses `state_5.sqlite`; an unsupported metadata schema requires explicit IDs until its adapter is updated. `CODEX_HOME` is honored when supplied to the process, otherwise `~/.codex` is used.
 
@@ -37,7 +41,7 @@ The live adapter observes at most 16 recent local conversations, prioritizing al
 
 The source app remains responsible for executing agents and enforcing permissions. Unknown forms, unsupported versions and uncertain deliveries belong in the source app. The native protocol has a race between preflight and submission; this utility cannot manufacture a host-side atomic request check.
 
-The private SQLite delivery ledger is stored in `~/Library/Application Support/AgentHandler`. It contains hashes, attempt IDs, status and timestamps, without question text, answers or transcripts. Demo data uses a separate temporary location and an in-memory ledger. No telemetry or network listener is included.
+The private SQLite delivery ledger is stored in `~/Library/Application Support/AgentHandler`. It contains hashes, attempt IDs, status and timestamps, without question text, answers or transcripts. A separate bounded UI preference stores session/turn identifiers, dismissal state and observed finish times so countdowns and dismissals survive an app restart; it stores no titles or message bodies. Demo data uses a separate temporary location and an in-memory ledger. No telemetry or network listener is included.
 
 The build is ad-hoc signed for local development. It is not a notarized distribution, and launch-at-login registration may be unavailable until installed as a normal app. Automatic updates are not included.
 

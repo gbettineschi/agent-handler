@@ -3,41 +3,56 @@ import AgentHandlerCore
 
 struct SessionsView: View {
     let sessions: [SessionSummary]
+    var now = Date()
+    var dismiss: (SessionSummary) -> Void = { _ in }
     let select: (RequestKey) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Sessions").font(.system(size: 12, weight: .semibold))
-                    Spacer()
-                    Text("Latest status").font(.caption).foregroundStyle(.secondary)
-                }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
-                List(sessions) { session in
-                    VStack(spacing: 0) {
-                    if let request = session.request {
-                        Button { select(request.id) } label: { SessionRow(session: session) }
-                            .buttonStyle(.plain).help("Show question or approval")
-                    } else { SessionRow(session: session) }
+            HStack {
+                Text("Sessions").font(.system(size: 12, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text("Latest status").font(.caption).foregroundStyle(.secondary)
+            }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+            List(sessions) { session in
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        if let request = session.request {
+                            Button { select(request.id) } label: { SessionRow(session: session, now: now) }
+                                .buttonStyle(.plain).handlerFocusRing().help("Show question or approval")
+                        } else { SessionRow(session: session, now: now) }
+                        if session.isFinished {
+                            PanelIconButton(title: "Dismiss finished session: \(session.title)", symbol: "xmark") { dismiss(session) }
+                                .padding(.trailing, 10)
+                        }
+                    }
                     if session.id != sessions.last?.id { Divider().padding(.leading, 44) }
-                    }.listRowInsets(EdgeInsets()).listRowSeparator(.hidden).listRowBackground(Color.clear)
-                }.listStyle(.plain).scrollContentBackground(.hidden)
+                }.listRowInsets(EdgeInsets()).listRowSeparator(.hidden).listRowBackground(Color.clear)
+            }.listStyle(.plain).scrollContentBackground(.hidden)
         }
     }
 }
 
 private struct SessionRow: View {
     let session: SessionSummary
+    let now: Date
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(tint).frame(width: 18).padding(.top, 2)
             VStack(alignment: .leading, spacing: 5) {
-                Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(2).multilineTextAlignment(.leading)
+                Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(2).multilineTextAlignment(.leading).help(session.title)
                 Text(session.request?.request.title.components(separatedBy: .newlines).first ?? (session.isClaude ? "Claude · read-only" : "Desktop · latest turn"))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.leading)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
                 .padding(.horizontal, 7).padding(.vertical, 4)
                 .background(tint.opacity(0.10), in: Capsule()).fixedSize()
+                if let remaining = session.remaining(at: now) {
+                    Text(remaining).font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary)
+                        .accessibilityLabel("Included in the menu-bar count for \(remaining) more")
+                }
+            }
             if session.request != nil { Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 5) }
         }.padding(.horizontal, 16).padding(.vertical, 13).frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle()).accessibilityElement(children: .combine)

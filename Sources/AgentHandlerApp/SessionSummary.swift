@@ -6,6 +6,14 @@ struct SessionSummary: Identifiable {
     let title: String
     let status: ActivityStatus
     let request: RequestView?
+    var turnID: String? = nil
+    var recentUntil: Date? = nil
+    var isFinished: Bool { [.completed, .failed, .cancelled].contains(status) && request == nil }
+    func remaining(at now: Date) -> String? {
+        guard let recentUntil, recentUntil > now else { return nil }
+        let seconds = min(300, Int(ceil(recentUntil.timeIntervalSince(now))))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
     var isClaude: Bool { id.installation.hasPrefix("claude-local-audit:") }
 
     static func rows(activities: [ActivityView], requests: [RequestView], titles: [String: String], recentIDs: [String]) -> [Self] {
@@ -24,7 +32,7 @@ struct SessionSummary: Identifiable {
                 status = [.pending, .sending].contains(request.state) ? .needsInput : .unknown
             } else { status = activityByID[scope]?.status ?? .unknown }
             return Self(id: scope, title: titles[scope.conversation] ?? (scope.installation.hasPrefix("claude-local-audit:") ? "Claude · \(scope.conversation.suffix(8))" : "Desktop session"),
-                        status: status, request: request)
+                        status: status, request: request, turnID: activityByID[scope]?.turnID ?? request?.id.turn)
         }.sorted {
             let lhs = order[$0.id.conversation] ?? Int.max, rhs = order[$1.id.conversation] ?? Int.max
             return lhs == rhs ? ($0.id.installation, $0.id.conversation) < ($1.id.installation, $1.id.conversation) : lhs < rhs

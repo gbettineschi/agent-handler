@@ -3,31 +3,27 @@ import Testing
 @testable import AgentHandlerApp
 
 struct PlacementTests {
-    @Test func staysOnChosenScreenBelowNotch() {
-        let screen = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+    @Test func anchorsToMenuItemOnNegativeCoordinateScreen() {
         let visible = CGRect(x: -1920, y: 0, width: 1920, height: 1048)
-        let panel = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: true)
+        let anchor = CGRect(x: -70, y: 1048, width: 45, height: 32)
+        let panel = PanelPlacement.menuFrame(visible: visible, anchor: anchor, contentHeight: 480)
         #expect(panel.width == 420)
-        #expect(panel.midX == screen.midX)
-        #expect(panel.maxY <= screen.maxY - 32)
+        #expect(panel.maxX == -25)
+        #expect(panel.maxY == 1042)
         #expect(visible.contains(panel))
     }
-    @Test func fitsSmallNonNotchedDisplay() {
-        let frame = CGRect(x: 0, y: 0, width: 400, height: 300)
-        let panel = PanelPlacement.frame(screen: frame, visible: frame, safeTop: 0, expanded: true)
-        #expect(frame.contains(panel))
+    @Test func fitsSmallDisplayAndOffscreenIceAnchor() {
+        let visible = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let panel = PanelPlacement.menuFrame(visible: visible, anchor: CGRect(x: -9000, y: 320, width: 40, height: 30), contentHeight: 480)
+        #expect(visible.contains(panel))
         #expect(panel.width > 0 && panel.height > 0)
     }
-
-    @Test func compactAndShortContentKeepTheSameTopAnchor() {
-        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+    @Test func changingContentHeightPreservesTopAndFallbackIsBounded() {
         let visible = CGRect(x: 0, y: 60, width: 1512, height: 890)
-        let compact = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: false)
-        let empty = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: true, contentHeight: 230)
-        #expect(compact.maxY == empty.maxY)
-        #expect(empty.height == 230)
-        #expect(visible.contains(empty))
-        let long = PanelPlacement.frame(screen: screen, visible: visible, safeTop: 32, expanded: true, contentHeight: 2000)
+        let short = PanelPlacement.menuFrame(visible: visible, anchor: nil, contentHeight: 230)
+        let long = PanelPlacement.menuFrame(visible: visible, anchor: nil, contentHeight: 2000)
+        #expect(short.maxY == 944)
+        #expect(short.height == 230)
         #expect(visible.contains(long))
     }
 }

@@ -13,6 +13,22 @@ func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws 
 }
 
 struct DesktopAdapterTests {
+    @Test func nativeTitleFollowsOwnerSnapshotAndRenameWithoutSendingAnswers() async throws {
+        var state = try #require(JSONValue.parse(fixtureState(questions: [])).objectValue)
+        state["title"] = .string("Real chat title")
+        let server = try FixtureDesktopServer(state: .object(state))
+        defer { server.stop() }
+        let adapter = DesktopAdapter(directory: server.directory, controller: RequestController(ledger: MemoryLedger()))
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.conversationTitles()["thread"] == "Real chat title" }
+        server.change([.object(["op": .string("replace"), "path": .array([.string("title")]), "value": .string("Renamed chat")])])
+        try await eventually { await adapter.conversationTitles()["thread"] == "Renamed chat" }
+        #expect(server.answers.isEmpty)
+        await adapter.start(threadIDs: [])
+        #expect(await adapter.conversationTitles().isEmpty)
+        await adapter.stop()
+    }
+
     @Test func nativeActivityCompletionDisconnectStopAndUnfollow() async throws {
         let running = try JSONValue.parse(fixtureState(questions: []))
         let server = try FixtureDesktopServer(state: running)

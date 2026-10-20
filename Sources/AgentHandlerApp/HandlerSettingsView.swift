@@ -14,15 +14,10 @@ struct HandlerSettingsView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Appearance & startup").font(.headline)
-                    Picker("Display", selection: $model.displayID) {
-                        Text("Main display").tag("automatic")
-                    ForEach(NSScreen.screens, id: \.handlerDisplayID) { screen in
-                            Text(screen.localizedName).tag(screen.handlerDisplayID)
-                        }
-                    }
                     Toggle("Launch at login", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) })).disabled(model.demo)
-                    Text("Click the island to open. Escape or click outside to close. Drafts stay until their request ends.").font(.caption).foregroundStyle(.secondary)
+                    Text("Click the menu-bar agent to open. Escape or click outside to close. Drafts stay until their request ends. Control-click the icon for commands.").font(.caption).foregroundStyle(.secondary)
                 }
+                Text("The number includes working sessions, sessions needing input, and finishes observed in the last five minutes. Finished rows can be dismissed; new work brings them back.").font(.caption).foregroundStyle(.secondary)
                 Divider()
                 DisclosureGroup("Connection details") {
                     VStack(alignment: .leading, spacing: 10) {

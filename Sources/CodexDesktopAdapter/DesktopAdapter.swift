@@ -51,6 +51,16 @@ public actor DesktopAdapter: ResponseTransport {
         for scope in previous.keys { _ = await controller.begin(scope: scope) }
     }
     public func activity() -> [ActivityView] { activityStore.views }
+    /// Presentation metadata only; not an input to request identity or response authority.
+    public func conversationTitles() -> [String: String] {
+        var titles: [String: String] = [:]
+        for (id, thread) in stream.threads where wanted.contains(id) {
+            guard let value = thread.state["title"].stringValue else { continue }
+            let title = String(value.prefix(512)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty { titles[id] = title }
+        }
+        return titles
+    }
     public func health() -> Health {
         let message = wanted.isEmpty ? "No conversations selected" :
             known == 0 ? "Desktop unavailable or incompatible — use the source app" :

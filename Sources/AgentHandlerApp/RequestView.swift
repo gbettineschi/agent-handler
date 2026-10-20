@@ -5,29 +5,18 @@ import AgentHandlerCore
 struct HandlerPanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var presentation: PanelPresentation
-    let toggle: () -> Void
     let collapse: () -> Void
     @State private var drafts: [String: QuestionDraft] = [:]
-    @State private var showSessionList = false
     @Environment(\.colorSchemeContrast) private var contrast
 
     private var expanded: Bool { presentation.expanded }
     private var current: RequestView? { model.displayedRequest }
-    private var working: Int { model.activities.filter { $0.status == .running }.count }
-    private var summary: String {
-        if !model.requests.isEmpty { return "\(model.requests.count) \(model.requests.count == 1 ? "needs" : "need") you" }
-        if !model.enabled { return "Paused" }
-        if model.needsSourceApproval || model.trackingWarning != nil || model.issue != nil { return "Check Desktop" }
-        if !model.demo && model.connectedConversations == 0 { return model.connectionChecked ? "Waiting for Desktop" : "Connecting…" }
-        if working > 0 { return "\(working) working" }
-        return "Agent Handler"
-    }
     private var indicator: String {
         if model.issue != nil || model.needsSourceApproval || model.trackingWarning != nil ||
             model.requests.contains(where: { $0.state != .pending && $0.state != .sending }) {
             return "exclamationmark.triangle.fill"
         }
-        return !model.requests.isEmpty ? "exclamationmark.bubble.fill" : working > 0 ? "ellipsis.circle" : "circle.dotted"
+        return !model.requests.isEmpty ? "exclamationmark.bubble.fill" : model.menuBarState.working > 0 ? "ellipsis.circle" : "circle.dotted"
     }
 
     var body: some View {
@@ -54,15 +43,15 @@ struct HandlerPanelView: View {
                 if model.showSettings {
                     HandlerSettingsView(model: model).padding(16)
                 } else {
-                    if let current, !showSessionList {
+                    if let current, !model.showSessions {
                         requestNavigation(current)
                         SingleRequestView(view: current, draft: draft(for: current.request),
                                           answer: { model.respond(current.request, answer: $0) })
                             .id(current.request.fingerprint)
                     } else if !model.sessions.isEmpty {
-                        SessionsView(sessions: model.sessions) { key in
+                        SessionsView(sessions: model.sessions, now: model.sessionClock, dismiss: model.dismissSession) { key in
                             model.selectedRequestID = key
-                            showSessionList = false
+                            model.showSessions = false
                         }
                     } else { emptyState }
                     if model.demo { footer }
@@ -73,9 +62,9 @@ struct HandlerPanelView: View {
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: expanded ? 20 : 15, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: expanded ? 20 : 15, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(.white.opacity(contrast == .increased ? 0.55 : 0.16), lineWidth: 1)
                 .allowsHitTesting(false)
         }
@@ -83,25 +72,24 @@ struct HandlerPanelView: View {
         .onChange(of: model.requests.map { $0.request.fingerprint }) { _, fingerprints in
             let live = Set(fingerprints)
             drafts = drafts.filter { live.contains($0.key) }
+            if let selected = model.selectedRequestID, !model.requests.contains(where: { $0.id == selected }) {
+                model.selectedRequestID = nil
+                model.showSessions = true
+            }
         }
-        .onChange(of: model.demoScenario) { _, _ in showSessionList = false }
+        .onChange(of: model.demoScenario) { _, _ in model.showSessions = false }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            Button(action: toggle) {
-                HStack(spacing: 8) {
-                    Image(systemName: indicator)
-                        .foregroundStyle(model.requests.isEmpty && model.issue == nil && !model.needsSourceApproval ? Color.secondary : .orange)
-                    Text(expanded ? (model.showSettings ? "Settings" : "Agent Handler") : summary)
-                        .font(.system(size: 12, weight: .medium)).lineLimit(1)
-                    if model.demo { Text("DEMO").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
-                    Spacer(minLength: 0)
-                    if !expanded { Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary) }
-                }.contentShape(Rectangle())
-            }.buttonStyle(.plain)
-                .accessibilityLabel(expanded ? "Collapse Agent Handler" : "Expand Agent Handler, \(summary)")
-                .help(expanded ? "Collapse panel" : "Show questions and approvals")
+            Image(systemName: indicator)
+                .foregroundStyle(model.requests.isEmpty && model.issue == nil && !model.needsSourceApproval ? Color.secondary : .orange)
+                .accessibilityHidden(true)
+            Text(model.showSettings ? "Settings" : "Agent Handler")
+                .font(.system(size: 13, weight: .semibold))
+                .accessibilityAddTraits(.isHeader)
+            if model.demo { Text("DEMO").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
+            Spacer(minLength: 0)
             if expanded {
                 if !model.requests.isEmpty {
                     Text("\(model.requests.count)").monospacedDigit().font(.caption.weight(.semibold))
@@ -119,7 +107,7 @@ struct HandlerPanelView: View {
 
     private func requestNavigation(_ current: RequestView) -> some View {
         HStack(spacing: 8) {
-            PanelIconButton(title: "All sessions", symbol: "chevron.left") { showSessionList = true }
+            PanelIconButton(title: "All sessions", symbol: "chevron.left") { model.showSessions = true }
             Text(model.titles[current.id.scope.conversation] ?? "Desktop conversation")
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 .help(model.titles[current.id.scope.conversation] ?? current.id.scope.conversation)
@@ -208,7 +196,7 @@ private struct SingleRequestView: View {
                                     Text(option.label).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                                     Spacer(minLength: 0)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
-                            }.buttonStyle(RequestActionStyle(selected: draft.choice == option.id)).disabled(view.state != .pending)
+                            }.buttonStyle(RequestActionStyle(selected: draft.choice == option.id)).handlerFocusRing().disabled(view.state != .pending)
                                 .accessibilityAddTraits(draft.choice == option.id ? [.isSelected] : [])
                         }
                         if allowsText {
@@ -251,7 +239,7 @@ private struct SingleRequestView: View {
                             Button { answer(.decision(choice.id)) } label: {
                                 Text(choice.label).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                            }.buttonStyle(RequestActionStyle()).disabled(view.state != .pending)
+                            }.buttonStyle(RequestActionStyle()).handlerFocusRing().disabled(view.state != .pending)
                         }
                     }.padding(16)
                 }.scrollBounceBehavior(.basedOnSize).frame(maxHeight: 180)
