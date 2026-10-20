@@ -93,6 +93,7 @@ import AgentHandlerCore
             ("uncertain", .uncertain, 420, 480, true, false, false),
             ("sessions", .empty, 420, 400, true, false, false),
             ("sessions-narrow", .empty, 340, 400, true, false, false),
+            ("sessions-thinking", .empty, 420, 400, true, false, false),
             ("sessions-long-titles", .empty, 420, 400, true, false, false),
             ("sessions-countdown", .empty, 420, 400, true, false, false),
             ("sessions-undo", .empty, 420, 400, true, false, false),
@@ -110,6 +111,16 @@ import AgentHandlerCore
             if scenario == .unavailable { precondition(model.requests.allSatisfy { $0.state == .unavailable }) }
             if scenario == .uncertain { precondition(model.requests.count == 1 && model.requests[0].state == .uncertain) }
             if scenario == .empty { precondition(model.requests.isEmpty && model.sessions.count == 3) }
+            if name == "sessions-thinking" {
+                var activity = ActivityStore()
+                for entry in model.activities {
+                    let epoch = activity.begin(scope: entry.id)
+                    activity.observe(.init(scope: entry.id, epoch: epoch, revision: 1, turnID: entry.turnID,
+                        phase: .running, attention: .clear, detail: .thinking))
+                }
+                model.activities = activity.views; model.updateSessionPresentation()
+                precondition(model.sessions.allSatisfy { $0.activityDetail == .thinking })
+            }
             if name == "sessions-long-titles" {
                 for activity in model.activities {
                     model.titles[activity.id.conversation] = "A long conversation title — review the implementation, check the remaining details and prepare the next release"

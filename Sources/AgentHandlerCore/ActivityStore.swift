@@ -1,5 +1,20 @@
 import Foundation
 
+/// Presentation hints only; never evidence of completion or response authority.
+public enum ActivityDetail: String, Sendable {
+    case thinking, responding, runningCommand, editingFiles, searching, usingTool, coordinating
+    public var label: String {
+        switch self {
+        case .thinking: "Thinking"
+        case .responding: "Responding"
+        case .runningCommand: "Running command"
+        case .editingFiles: "Editing files"
+        case .searching: "Searching"
+        case .usingTool: "Using a tool"
+        case .coordinating: "Coordinating agents"
+        }
+    }
+}
 public enum ActivityPhase: String, Sendable { case running, completed, failed, cancelled }
 public enum ActivityAttention: String, Sendable { case clear, required, unknown }
 public enum ActivityStatus: String, Sendable { case unknown, running, needsInput, completed, failed, cancelled }
@@ -12,10 +27,11 @@ public struct ActivitySnapshot: Sendable {
     public let turnID: String
     public let phase: ActivityPhase
     public let attention: ActivityAttention
+    public let detail: ActivityDetail?
     public init(scope: RequestScope, epoch: UUID, revision: Int64, turnID: String,
-                phase: ActivityPhase, attention: ActivityAttention) {
+                phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail? = nil) {
         self.scope = scope; self.epoch = epoch; self.revision = revision
-        self.turnID = turnID; self.phase = phase; self.attention = attention
+        self.turnID = turnID; self.phase = phase; self.attention = attention; self.detail = detail
     }
 }
 
@@ -24,6 +40,7 @@ public struct ActivityView: Identifiable, Equatable, Sendable {
     public let turnID: String
     public let phase: ActivityPhase
     public let attention: ActivityAttention
+    public internal(set) var detail: ActivityDetail?
     public internal(set) var isCurrent: Bool
     public var status: ActivityStatus {
         guard isCurrent else { return .unknown }
@@ -54,7 +71,7 @@ public struct ActivityStore: Sendable {
     }
     public mutating func begin(scope: RequestScope) -> UUID {
         var previous = sources[scope]?.view
-        previous?.isCurrent = false
+        previous?.isCurrent = false; previous?.detail = nil
         let epoch = UUID()
         sources[scope] = Source(epoch: epoch, view: previous)
         return epoch
@@ -65,17 +82,18 @@ public struct ActivityStore: Sendable {
         source.revision = snapshot.revision
         guard !snapshot.scope.installation.isEmpty, !snapshot.scope.conversation.isEmpty,
               !snapshot.turnID.isEmpty, snapshot.turnID.utf8.count <= 256 else {
-            source.view?.isCurrent = false; sources[snapshot.scope] = source
+            source.view?.isCurrent = false; source.view?.detail = nil; sources[snapshot.scope] = source
             return false
         }
         source.view = .init(id: snapshot.scope, turnID: snapshot.turnID, phase: snapshot.phase,
-                            attention: snapshot.attention, isCurrent: true)
+                            attention: snapshot.attention, detail: snapshot.phase == .running && snapshot.attention == .clear ? snapshot.detail : nil, isCurrent: true)
         sources[snapshot.scope] = source
         return true
     }
     public mutating func invalidate(scope: RequestScope, epoch: UUID) {
         guard sources[scope]?.epoch == epoch else { return }
         sources[scope]?.view?.isCurrent = false
+        sources[scope]?.view?.detail = nil
     }
     public mutating func remove(scope: RequestScope) { sources.removeValue(forKey: scope) }
 }

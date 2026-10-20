@@ -129,7 +129,7 @@ public actor DesktopAdapter: ResponseTransport {
                 let value = try DesktopActivity.parse(state: thread.state, threadID: threadID,
                     owner: thread.ownerClientID, installation: installation)
                 activityStore.observe(.init(scope: scope, epoch: epoch, revision: thread.revision,
-                    turnID: value.turnID, phase: value.phase, attention: value.attention))
+                    turnID: value.turnID, phase: value.phase, attention: value.attention, detail: value.detail))
             } catch { activityStore.invalidate(scope: scope, epoch: epoch) }
         }
     }

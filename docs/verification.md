@@ -288,3 +288,14 @@ An exclusive-lock fixture first reproduced the old misdiagnosis (`unsupportedSch
 The signed live process logged `Conversation catalog ready: 16 candidates`. Native UI inspection then showed four real sessions (Job tracker, this conversation, Vinted and Yaris), with current activity labels and no discovery-warning banner. No response/approval was submitted and the native database was not modified. This demonstrates current recovery after installing the fix, not proof of the original failure's exact cause or a live exclusive-lock test against the user's database.
 
 [macOS verification 39443340475](https://github.com/gbettineschi/agent-handler/actions/runs/39443340475) passed at `a8b45890193f85fd2de3f4a1c7bb38c2cd69cb0b`: all 136 tests, adaptive UI matrix and transitions, release bundle, controller demo and strict ad-hoc signature. The following documentation-only commit records the result.
+
+
+## 2026-10-20 — source labels and live activity hints
+
+Replaced Work with Codex/Claude source labels, dots with native progress indicators (static gear for Reduce Motion), header dots with the agent glyph, and unlabeled restore history with Hidden. Read-only inspection of native item shapes found running turns whose latest items are reasoning markers without status, and completed command items. Activity hints read only retained type/status; reasoning/message bodies and projection limits are unchanged.
+
+Optional hints are separate from lifecycle/response authority. Latest reasoning markers show Thinking; other supported hints require inProgress. The parser never scans back past a completed or unknown last item. The store clears hints on disconnect, owner replacement, malformed newer snapshots, input and terminal phase. App presentation polls in-memory activity each second. Claude remains generic status with its current read-only adapter.
+
+A nil parser stub first failed the Thinking/Running command expectations; implementation passes. Tests also cover supported/unknown item statuses, no backward revival, stale-revision refusal, hint withdrawal and provider labels. **140 tests in 23 suites**, sixteen adaptive visual cases and same-tree sizing pass locally. Source review found no Important defect and notes Thinking is a latest-marker hint, not proof of continuous model computation.
+
+The signed live build showed two actual Codex conversations. Native inspection first showed this chat Running and Job tracker Thinking; a subsequent screenshot showed Job tracker Running and this chat Thinking. The header robot and labeled Hidden menu were visible. No source question/approval was answered, and no native command was triggered just to produce an activity hint. Other specific activity labels have fixture coverage, not separate live acceptance.

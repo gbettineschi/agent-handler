@@ -4,7 +4,7 @@ import AgentHandlerCore
 @testable import CodexDesktopAdapter
 
 struct DesktopActivityTests {
-    func parse(_ state: JSONValue) throws -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention) {
+    func parse(_ state: JSONValue) throws -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail?) {
         try DesktopActivity.parse(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
     }
 
@@ -90,4 +90,32 @@ struct DesktopActivityTests {
             #expect(throws: (any Error).self) { _ = try parse(.object(fields)) }
         }
     }
+    @Test func activityHintUsesOnlyLatestCurrentTurnItem() {
+        func turn(_ items: [JSONValue], status: String = "inProgress") -> JSONValue {
+            .object(["status": .string(status), "items": .array(items)])
+        }
+        let reasoning: JSONValue = .object(["type": .string("reasoning")])
+        let command: JSONValue = .object(["type": .string("commandExecution"), "status": .string("inProgress")])
+        #expect(DesktopActivity.detail(in: turn([reasoning])) == .thinking)
+        #expect(DesktopActivity.detail(in: turn([reasoning, command])) == .runningCommand)
+        let finished: JSONValue = .object(["type": .string("commandExecution"), "status": .string("completed")])
+        #expect(DesktopActivity.detail(in: turn([reasoning, finished])) == nil)
+        #expect(DesktopActivity.detail(in: turn([reasoning], status: "completed")) == nil)
+        #expect(DesktopActivity.detail(in: turn([.object(["type": .string("future")])])) == nil)
+        #expect(DesktopActivity.detail(in: turn([.object(["type": .string("commandExecution")])])) == nil)
+    }
+
+    @Test func supportedActiveHintsRequireNativeItemStatus() {
+        let cases: [(String, ActivityDetail)] = [("agentMessage", .responding), ("fileChange", .editingFiles),
+            ("webSearch", .searching), ("mcpToolCall", .usingTool), ("collabAgentToolCall", .coordinating)]
+        for (type, expected) in cases {
+            func turn(_ status: String) -> JSONValue {
+                .object(["status": .string("inProgress"), "items": .array([.object(["type": .string(type), "status": .string(status)])])])
+            }
+            #expect(DesktopActivity.detail(in: turn("inProgress")) == expected)
+            #expect(DesktopActivity.detail(in: turn("completed")) == nil)
+            #expect(DesktopActivity.detail(in: turn("future")) == nil)
+        }
+    }
+
 }

@@ -12,13 +12,6 @@ struct HandlerPanelView: View {
 
     private var expanded: Bool { presentation.expanded }
     private var current: RequestView? { model.displayedRequest }
-    private var indicator: String {
-        if model.issue != nil || model.needsSourceApproval || model.trackingWarning != nil ||
-            model.requests.contains(where: { $0.state != .pending && $0.state != .sending }) {
-            return "exclamationmark.triangle.fill"
-        }
-        return !model.requests.isEmpty ? "exclamationmark.bubble.fill" : model.menuBarState.working > 0 ? "ellipsis.circle" : "circle.dotted"
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -98,8 +91,8 @@ struct HandlerPanelView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: indicator)
-                .foregroundStyle(model.requests.isEmpty && model.issue == nil && !model.needsSourceApproval ? Color.secondary : .orange)
+            Image(nsImage: AgentStatusIcon.image(mode: model.menuBarState.mode))
+                .frame(width: 16, height: 16).help("Agent Handler status")
                 .accessibilityHidden(true)
             Text(model.showSettings ? "Settings" : "Agent Handler")
                 .font(.system(size: 13, weight: .semibold))
@@ -113,8 +106,8 @@ struct HandlerPanelView: View {
                             Button(session.title) { model.restoreSession(session) }
                         }
                     } label: {
-                        Image(systemName: "clock.arrow.circlepath").font(.system(size: 12))
-                            .frame(width: 28, height: 28)
+                        Label("Hidden", systemImage: "eye.slash").font(.caption)
+                            .padding(.horizontal, 4).frame(height: 28)
                     }.menuStyle(.borderlessButton).fixedSize()
                         .accessibilityLabel("Restore hidden sessions").help("Restore a hidden finished session")
                 }

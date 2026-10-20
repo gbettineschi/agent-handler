@@ -124,7 +124,10 @@ import ClaudeDesktopAdapter
         }
         presentationTimer = Task { [weak self] in
             while !Task.isCancelled {
-                self?.updateSessionPresentation()
+                if let self {
+                    if !demo, enabled, !sleeping { activities = await adapter.activity() }
+                    updateSessionPresentation()
+                }
                 try? await Task.sleep(for: .seconds(1))
             }
         }

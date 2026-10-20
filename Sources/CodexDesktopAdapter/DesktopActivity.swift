@@ -4,9 +4,29 @@ import AgentHandlerCore
 /// Does not infer completion from item text, a missing request or a quiet connection.
 enum DesktopActivity {
     enum Failure: Error { case unsupported }
+    /// The latest item is a display hint, not lifecycle evidence. In particular,
+    /// do not scan backwards past a completed tool and revive older reasoning.
+    static func detail(in turn: JSONValue) -> ActivityDetail? {
+        guard turn["status"].stringValue == "inProgress",
+              let item = turn["items"].arrayValue?.last else { return nil }
+        let status = item["status"].stringValue
+        // Desktop emits a reasoning marker without an item status. Its text is
+        // neither inspected nor displayed. Other activities need an active flag.
+        if item["type"].stringValue == "reasoning", status == nil || status == "inProgress" { return .thinking }
+        guard status == "inProgress" else { return nil }
+        switch item["type"].stringValue {
+        case "agentMessage": return .responding
+        case "commandExecution": return .runningCommand
+        case "fileChange": return .editingFiles
+        case "webSearch": return .searching
+        case "mcpToolCall": return .usingTool
+        case "collabAgentToolCall": return .coordinating
+        default: return nil
+        }
+    }
 
     static func parse(state: JSONValue, threadID: String, owner: String, installation: String) throws
-        -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention) {
+        -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail?) {
         if state["turnHistory"] != .null {
             guard state["turnHistory"]["kind"].stringValue == "canonical",
                   let islands = state["turnHistory"]["history"]["islands"].arrayValue,
@@ -38,6 +58,6 @@ enum DesktopActivity {
                 requests.allSatisfy({ $0.objectValue != nil && $0["method"].stringValue?.isEmpty == false && $0["completed"] == .bool(true) }) {
             attention = .clear
         } else { attention = .unknown }
-        return (turnID, phase, attention)
+        return (turnID, phase, attention, detail(in: turn))
     }
 }

@@ -40,16 +40,23 @@ struct SessionsView: View {
 private struct SessionRow: View {
     let session: SessionSummary
     let now: Date
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(tint).frame(width: 18).padding(.top, 2)
+            Group {
+                if session.status == .running, !reduceMotion {
+                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                } else { Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(tint) }
+            }.frame(width: 18, height: 18).padding(.top, 1).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(2)
                     .multilineTextAlignment(.leading).help(session.title)
                 HStack(spacing: 5) {
-                    Text(session.isClaude ? "Claude · read-only" : "Work").foregroundStyle(.secondary)
+                    Text(session.sourceLabel).foregroundStyle(.secondary)
+                        .help(session.isClaude ? "Claude Desktop · read-only local activity" : "Codex · Desktop connection")
                     Text("·").foregroundStyle(.tertiary)
                     Text(label).foregroundStyle(tint)
+                        .help(session.activityDetail == nil ? label : "Latest native activity; updates while the agent runs.")
                     if let remaining = session.remaining(at: now) {
                         Text("·").foregroundStyle(.tertiary)
                         Text(remaining).monospacedDigit().foregroundStyle(.secondary)
@@ -78,7 +85,7 @@ private struct SessionRow: View {
             }
         }
         switch session.status {
-        case .running: return "Running"
+        case .running: return session.activityDetail?.label ?? "Running"
         case .needsInput: return "Needs you"
         case .completed: return "Completed"
         case .failed: return "Failed"
@@ -89,7 +96,7 @@ private struct SessionRow: View {
     private var symbol: String {
         if let request = session.request, ![.pending, .sending].contains(request.state) { return "exclamationmark.triangle" }
         switch session.status {
-        case .running: return "ellipsis.circle"
+        case .running: return "gearshape"
         case .needsInput: return "exclamationmark.bubble"
         case .completed: return "checkmark.circle"
         case .failed: return "exclamationmark.triangle"

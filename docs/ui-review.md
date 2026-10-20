@@ -62,3 +62,12 @@ The expanded matrix adds narrow sessions, long titles, countdowns, Undo, sixteen
 Fixed 260/400/480-point presets are replaced by measured natural content height. Scroll content is measured inside its viewport, separately from header/navigation/actions, banners and Undo. Route removal removes its measurements. The top edge remains anchored while a short AppKit transition changes height; Reduce Motion disables it. The 640-point/display cap keeps long content scrollable. Approval actions retain their own measured area up to 180 points. Session rows use a measured scroll stack, also exposing each finished-row × as an individual native button.
 
 All fifteen render fixtures now use measured sizing and check that measurement stays stable after resizing. A same-hosting-tree sequence covers three sessions → one → multiline banner → clear → settings → list → empty → restored, including a forced 100-point viewport. Live testing exercised Job tracker ×, Undo, and opening/closing Connection details. The row disappeared and returned, and the window resized in both directions. No source request or answer was sent.
+
+
+## Provider and activity clarity
+
+Rows show Codex or Claude instead of Work. Running rows have a native progress indicator, with a static gear under Reduce Motion. The header uses the original agent glyph; the ambiguous history glyph is replaced with a labeled Hidden menu. Source tooltips describe the Desktop connection and Claude's read-only coverage.
+
+Codex activity hints come only from the latest item in the newest validated running turn. A native reasoning marker may show Thinking; tools/messages need explicit inProgress status for their specific labels. Completed/unknown items fall back to Running rather than reviving older activity. Thinking is a latest-activity hint, not a claim of continuously measured model computation. No reasoning content or message body is read for these hints, and the bounded JSON projection is unchanged. The app reads the in-memory activity state once per second. Hints clear on disconnected/replaced owners, invalid snapshots, input, or completion.
+
+The [thinking fixture](images/ui/sessions-thinking.png) uses the real ActivityStore path. Native live inspection showed Codex labels and successive Running/Thinking changes in two real conversations, plus the labeled Hidden menu. Individual command/edit/search/tool hint shapes are fixture-verified; no native command was launched solely to manufacture a UI state.

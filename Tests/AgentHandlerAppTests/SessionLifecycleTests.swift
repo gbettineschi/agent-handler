@@ -136,4 +136,10 @@ struct SessionLifecycleTests {
         #expect(MenuBarState(sessions: [row(.running)], now: now).shouldAnimate(reduceMotion: true) == false)
         #expect(MenuBarState(sessions: [row(.running)], now: now).shouldAnimate(reduceMotion: false))
     }
+    @Test func sourceLabelsIdentifyTheProvider() {
+        #expect(row(.running).sourceLabel == "Codex")
+        let claude = SessionSummary(id: .init(installation: "claude-local-audit:desktop", conversation: "c"), title: "Claude chat", status: .running, request: nil)
+        #expect(claude.sourceLabel == "Claude")
+    }
+
 }

@@ -96,4 +96,21 @@ struct ActivityTests {
         #expect(store.views.first?.id == other)
         #expect(store.views.first?.status == .completed)
     }
+    @Test func activityHintsClearOnInputCompletionAndDisconnect() throws {
+        var store = ActivityStore()
+        let epoch = store.begin(scope: scope)
+        #expect(true == store.observe(.init(scope: scope, epoch: epoch, revision: 1, turnID: "t", phase: .running, attention: .clear, detail: .thinking)))
+        #expect(store.views.first?.detail == .thinking)
+        store.invalidate(scope: scope, epoch: epoch)
+        #expect(store.views.first?.detail == nil)
+        #expect(true == store.observe(.init(scope: scope, epoch: epoch, revision: 2, turnID: "t", phase: .running, attention: .required, detail: .thinking)))
+        #expect(store.views.first?.detail == nil)
+        #expect(store.views.first?.status == .needsInput)
+        #expect(true == store.observe(.init(scope: scope, epoch: epoch, revision: 3, turnID: "t", phase: .completed, attention: .clear, detail: .runningCommand)))
+        #expect(store.views.first?.detail == nil)
+        #expect(store.views.first?.status == .completed)
+        #expect(false == store.observe(.init(scope: scope, epoch: epoch, revision: 2, turnID: "t", phase: .running, attention: .clear, detail: .thinking)))
+        #expect(store.views.first?.detail == nil)
+    }
+
 }
