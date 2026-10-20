@@ -28,18 +28,7 @@ import AgentHandlerCore
         window.isReleasedWhenClosed = false; window.contentView = host
         defer { window.close() }
         func settle() async throws -> CGFloat {
-            host.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(120))
-            let natural = measured
-            guard natural > 0 else { throw Failure.dimensions }
-            window.setContentSize(NSSize(width: 420, height: min(640, natural)))
-            host.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(120))
-            guard abs(natural - measured) <= 1 else {
-                print("Adaptive transition did not settle: \(natural) → \(measured)")
-                throw Failure.dimensions
-            }
-            return natural
+            try await settleHeight(window: window, host: host, width: 420, measured: { measured })
         }
         let three = try await settle()
         let original = model.activities
@@ -66,6 +55,29 @@ import AgentHandlerCore
             throw Failure.dimensions
         }
         print("adaptive transitions: \([three, one, warning, cleared, settings, returned, empty, restored])")
+    }
+    /// Native scrollbars can change text width once when a viewport stops
+    /// overflowing. Require two stable layouts, and reject persistent feedback.
+    @MainActor private static func settleHeight<V: View>(window: NSWindow, host: NSHostingView<V>,
+                                                       width: CGFloat, measured: () -> CGFloat) async throws -> CGFloat {
+        var history: [CGFloat] = []
+        var stable = 0
+        for _ in 0..<6 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(120))
+            let natural = measured()
+            guard natural > 0, natural.isFinite else { throw Failure.dimensions }
+            let target = PanelPlacement.menuFrame(visible: CGRect(x: 0, y: 0, width: 1200, height: 1000),
+                                                  anchor: nil, contentHeight: natural).height
+            let alreadyFits = abs(host.bounds.height - target) <= 1
+            if alreadyFits, let previous = history.last, abs(previous - natural) <= 1 { stable += 1 }
+            else { stable = 0 }
+            history.append(natural)
+            if stable >= 2 { return natural }
+            window.setContentSize(NSSize(width: width, height: target))
+        }
+        print("Height did not converge in six layouts: \(history)")
+        throw Failure.dimensions
     }
     @MainActor private static func render() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -146,21 +158,8 @@ import AgentHandlerCore
             window.isReleasedWhenClosed = false
             window.contentView = host
             host.setFrameSize(bounds.size)
-            host.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(120))
-            host.layoutSubtreeIfNeeded()
-            guard measuredHeight > 0 else { throw Failure.dimensions }
-            let naturalHeight = measuredHeight
-            let adaptiveHeight = PanelPlacement.menuFrame(visible: CGRect(x: 0, y: 0, width: 1200, height: 1000),
-                                                          anchor: nil, contentHeight: measuredHeight).height
-            window.setContentSize(NSSize(width: width, height: adaptiveHeight))
-            host.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(120))
-            host.layoutSubtreeIfNeeded()
-            guard abs(measuredHeight - naturalHeight) <= 1 else {
-                print("Unstable natural height for \(name): \(naturalHeight) → \(measuredHeight)")
-                throw Failure.dimensions
-            }
+            _ = try await settleHeight(window: window, host: host, width: width, measured: { measuredHeight })
+            let adaptiveHeight = window.contentView!.bounds.height
             if name == "sessions-many" { precondition(adaptiveHeight == 640) }
             if name == "empty" { precondition(adaptiveHeight < 260) }
             guard abs(host.bounds.width - width) < 0.5, abs(host.bounds.height - adaptiveHeight) < 0.5 else {
