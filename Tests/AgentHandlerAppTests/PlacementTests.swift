@@ -24,6 +24,8 @@ struct PlacementTests {
         let long = PanelPlacement.menuFrame(visible: visible, anchor: nil, contentHeight: 2000)
         #expect(short.maxY == 944)
         #expect(short.height == 230)
+        #expect(long.height == 640)
+        #expect(long.maxY == short.maxY)
         #expect(visible.contains(long))
     }
 }

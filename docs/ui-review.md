@@ -55,3 +55,10 @@ Chat titles now take the full row width, with compact source/status/countdown un
 Hide has a ten-second Undo available only on the sessions route, so Command-Z cannot capture answer-field editing. The restore menu recovers individual hidden finished rows after that offer expires. Both use exact source/turn identity and preserve the original countdown. A real hidden Job tracker row was restored through this menu while the other pre-existing hidden session was left hidden. Native list-row inspection alone does not establish that the × hit target was exercised successfully.
 
 The expanded matrix adds narrow sessions, long titles, countdowns, Undo, sixteen sessions and a fully empty panel. Demo reset now clears its own dismissal state between examples. The full local suite passes 133 tests. VoiceOver is out of scope at the user's request.
+
+
+## Content-driven height
+
+Fixed 260/400/480-point presets are replaced by measured natural content height. Scroll content is measured inside its viewport, separately from header/navigation/actions, banners and Undo. Route removal removes its measurements. The top edge remains anchored while a short AppKit transition changes height; Reduce Motion disables it. The 640-point/display cap keeps long content scrollable. Approval actions retain their own measured area up to 180 points. Session rows use a measured scroll stack, also exposing each finished-row × as an individual native button.
+
+All fifteen render fixtures now use measured sizing and check that measurement stays stable after resizing. A same-hosting-tree sequence covers three sessions → one → multiline banner → clear → settings → list → empty → restored, including a forced 100-point viewport. Live testing exercised Job tracker ×, Undo, and opening/closing Connection details. The row disappeared and returned, and the window resized in both directions. No source request or answer was sent.

@@ -6,6 +6,7 @@ struct HandlerPanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var presentation: PanelPresentation
     let collapse: () -> Void
+    var contentHeightChanged: (CGFloat) -> Void = { _ in }
     @State private var drafts: [String: QuestionDraft] = [:]
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -21,30 +22,30 @@ struct HandlerPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            header.panelMeasuredHeight(.header)
             if expanded {
                 Divider()
                 if let issue = model.issue {
                         HStack(alignment: .top) {
                             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                            Text(issue).font(.callout)
+                            Text(issue).font(.callout).fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                             PanelIconButton(title: "Dismiss message", symbol: "xmark") { model.issue = nil }
-                        }.padding(12).background(.orange.opacity(0.10))
+                        }.padding(12).background(.orange.opacity(0.10)).panelMeasuredHeight(.issue)
                 }
                 if model.needsSourceApproval && model.enabled {
                     Label("Some approvals need the source app.", systemImage: "exclamationmark.triangle")
-                        .font(.callout).foregroundStyle(.orange).padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true).padding(12).frame(maxWidth: .infinity, alignment: .leading).panelMeasuredHeight(.sourceApproval)
                 }
                 if let warning = model.trackingWarning, model.enabled {
                     Label(warning, systemImage: "exclamationmark.triangle")
-                        .font(.callout).foregroundStyle(.orange).padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true).padding(12).frame(maxWidth: .infinity, alignment: .leading).panelMeasuredHeight(.warning)
                 }
                 if model.showSettings {
-                    HandlerSettingsView(model: model).padding(16)
+                    HandlerSettingsView(model: model)
                 } else {
                     if let current, !model.showSessions {
-                        requestNavigation(current)
+                        requestNavigation(current).panelMeasuredHeight(.navigation)
                         SingleRequestView(view: current, draft: draft(for: current.request),
                                           answer: { model.respond(current.request, answer: $0) })
                             .id(current.request.fingerprint)
@@ -53,7 +54,7 @@ struct HandlerPanelView: View {
                             model.selectedRequestID = key
                             model.showSessions = false
                         }
-                    } else { emptyState }
+                    } else { emptyState.panelMeasuredHeight(.content) }
                     if let dismissal = model.dismissal, model.showSessions {
                         HStack(spacing: 8) {
                             Text("Hidden: \(dismissal.session.title)").lineLimit(1).truncationMode(.middle)
@@ -63,11 +64,15 @@ struct HandlerPanelView: View {
                                 .buttonStyle(.borderless).keyboardShortcut("z", modifiers: .command)
                                 .help("Restore this finished session (⌘Z)")
                         }.font(.caption).padding(.horizontal, 16).padding(.vertical, 10)
-                            .overlay(alignment: .top) { Divider() }
+                            .overlay(alignment: .top) { Divider() }.panelMeasuredHeight(.undo)
                     }
-                    if model.demo { footer }
+                    if model.demo { footer.panelMeasuredHeight(.footer) }
                 }
             }
+        }
+        .onPreferenceChange(PanelContentHeights.self) { heights in
+            guard expanded, heights[.content] != nil else { return }
+            contentHeightChanged(heights.values.reduce(heights[.actions] == nil ? 1 : 2, +))
         }
         .font(.system(size: 13))
         .foregroundStyle(.primary)
@@ -161,7 +166,7 @@ struct HandlerPanelView: View {
             Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Desktop for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Desktop" : "No sessions to show").font(.headline)
             Text(model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Settings if it stays unavailable." : "New activity will appear automatically.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.padding(20).frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
     }
 
     private var footer: some View {
@@ -187,6 +192,7 @@ struct HandlerPanelView: View {
 }
 
 private struct SingleRequestView: View {
+    @State private var approvalActionsHeight: CGFloat = 180
     let view: RequestView
     @Binding var draft: QuestionDraft
     let answer: (UserAnswer) -> Void
@@ -196,7 +202,7 @@ private struct SingleRequestView: View {
             if view.state != .pending {
                 Label(status, systemImage: view.state == .sending ? "arrow.up.circle" : "exclamationmark.triangle")
                     .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12).panelMeasuredHeight(.status)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -240,7 +246,7 @@ private struct SingleRequestView: View {
                                 .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 10))
                         }
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 16)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 16).panelMeasuredHeight(.content)
             }.scrollBounceBehavior(.basedOnSize).scrollIndicators(.visible)
             Divider()
             switch view.request.content {
@@ -253,7 +259,7 @@ private struct SingleRequestView: View {
                     }.buttonStyle(.borderedProminent).controlSize(.large)
                         .keyboardShortcut(.return, modifiers: .command).help("Send answer (⌘Return)")
                         .disabled(view.state != .pending || draft.answer(options: options, allowsText: allowsText) == nil)
-                }.padding(16)
+                }.padding(16).panelMeasuredHeight(.actions)
             case .approval(let choices):
                 ScrollView {
                     VStack(spacing: 8) {
@@ -263,8 +269,13 @@ private struct SingleRequestView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }.buttonStyle(RequestActionStyle()).handlerFocusRing().disabled(view.state != .pending)
                         }
-                    }.padding(16)
-                }.scrollBounceBehavior(.basedOnSize).frame(maxHeight: 180)
+                    }.padding(16).panelMeasuredHeight(.actions, limit: 180)
+                }.scrollBounceBehavior(.basedOnSize).frame(height: approvalActionsHeight)
+                    .onPreferenceChange(PanelContentHeights.self) { heights in
+                        if let height = heights[.actions], abs(approvalActionsHeight - height) >= 1 {
+                            approvalActionsHeight = height
+                        }
+                    }
             }
         }
     }

@@ -13,22 +13,26 @@ struct SessionsView: View {
                 Text("Sessions").font(.system(size: 12, weight: .semibold)).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text("Newest first").font(.caption).foregroundStyle(.secondary)
-            }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
-            List(sessions) { session in
+            }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8).panelMeasuredHeight(.navigation)
+            ScrollView {
                 VStack(spacing: 0) {
-                    HStack(spacing: 0) {
-                        if let request = session.request {
-                            Button { select(request.id) } label: { SessionRow(session: session, now: now) }
-                                .buttonStyle(SessionOpenStyle()).handlerFocusRing().help("Show question or approval")
-                        } else { SessionRow(session: session, now: now) }
-                        if session.isFinished {
-                            PanelIconButton(title: "Dismiss finished session: \(session.title)", symbol: "xmark", helpText: "Hide this finished turn. New activity brings it back.") { dismiss(session) }
-                                .padding(.trailing, 10)
+                    ForEach(sessions) { session in
+                        VStack(spacing: 0) {
+                            HStack(spacing: 0) {
+                                if let request = session.request {
+                                    Button { select(request.id) } label: { SessionRow(session: session, now: now) }
+                                        .buttonStyle(SessionOpenStyle()).handlerFocusRing().help("Show question or approval")
+                                } else { SessionRow(session: session, now: now) }
+                                if session.isFinished {
+                                    PanelIconButton(title: "Dismiss finished session: \(session.title)", symbol: "xmark", helpText: "Hide this finished turn. New activity brings it back.") { dismiss(session) }
+                                        .padding(.trailing, 10)
+                                }
+                            }.accessibilityElement(children: .contain)
+                            if session.id != sessions.last?.id { Divider().padding(.leading, 44) }
                         }
-                    }.accessibilityElement(children: .contain)
-                    if session.id != sessions.last?.id { Divider().padding(.leading, 44) }
-                }.listRowInsets(EdgeInsets()).listRowSeparator(.hidden).listRowBackground(Color.clear)
-            }.listStyle(.plain).scrollContentBackground(.hidden)
+                    }
+                }.padding(.bottom, 8).panelMeasuredHeight(.content)
+            }.scrollBounceBehavior(.basedOnSize)
         }
     }
 }

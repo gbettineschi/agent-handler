@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import Combine
 
 final class AttentionPanel: NSPanel {
     var dismiss: (() -> Void)?
@@ -13,9 +12,11 @@ final class AttentionPanel: NSPanel {
     private let panel: AttentionPanel
     private let model: AppModel
     private let presentation = PanelPresentation()
-    private var observations = Set<AnyCancellable>()
     private var eventMonitors: [Any] = []
     private var menuTracking = false
+    private var contentHeight: CGFloat = 260
+    private var resizeTask: Task<Void, Never>?
+    private var placedFrame: CGRect?
     var visibilityChanged: ((Bool) -> Void)?
     weak var anchor: NSStatusBarButton?
     init(model: AppModel) {
@@ -31,17 +32,12 @@ final class AttentionPanel: NSPanel {
         panel.dismiss = { [weak self] in self?.collapse() }
         // A stable hosting tree preserves drafts while the window is collapsed.
         let host = NSHostingView(rootView: HandlerPanelView(model: model, presentation: presentation,
-            collapse: { [weak self] in self?.collapse() }))
+            collapse: { [weak self] in self?.collapse() },
+            contentHeightChanged: { [weak self] height in self?.contentSizeChanged(height) }))
         // PanelPlacement owns window dimensions. Intrinsic-size propagation can
         // otherwise make a scrollable error state expand the window itself.
         host.sizingOptions = []
         panel.contentView = host
-        model.$showSettings.combineLatest(model.$requests, model.$selectedRequestID).sink { [weak self] _, _, _ in
-            Task { @MainActor [weak self] in self?.place() }
-        }.store(in: &observations)
-        model.$activities.combineLatest(model.$claudeActivities).sink { [weak self] _, _ in
-            Task { @MainActor [weak self] in self?.place() }
-        }.store(in: &observations)
         if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
             MainActor.assumeIsolated {
                 guard let self, event.windowNumber != self.panel.windowNumber else { return }
@@ -89,16 +85,32 @@ final class AttentionPanel: NSPanel {
     }
     @objc private func menuBegan() { menuTracking = true }
     @objc private func menuEnded() { menuTracking = false }
+    private func contentSizeChanged(_ height: CGFloat) {
+        guard height.isFinite, height > 0 else { return }
+        resizeTask?.cancel()
+        // Coalesce preference updates into one resize after SwiftUI finishes layout.
+        resizeTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self, abs(self.contentHeight - height) >= 1 else { return }
+            self.contentHeight = height
+            self.place()
+        }
+    }
     private func place() {
         guard presentation.expanded else { return }
         let anchorRect = anchor.flatMap { button in button.window.map { $0.convertToScreen(button.convert(button.bounds, to: nil)) } }
         let screen = anchor?.window?.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        let approval: Bool
-        if let content = model.displayedRequest?.request.content, case .approval = content { approval = true } else { approval = false }
-        let height: CGFloat = model.showSettings || approval ? 480 : (model.requests.isEmpty && model.sessions.isEmpty ? 260 : 400)
-        let frame = PanelPlacement.menuFrame(visible: screen.visibleFrame, anchor: anchorRect, contentHeight: height)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        let frame = PanelPlacement.menuFrame(visible: screen.visibleFrame, anchor: anchorRect, contentHeight: contentHeight)
+        if placedFrame != frame {
+            placedFrame = frame
+            let animate = panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = animate ? 0.14 : 0
+                if animate { panel.animator().setFrame(frame, display: true) }
+                else { panel.setFrame(frame, display: true) }
+            }
+        }
     }
 }
 

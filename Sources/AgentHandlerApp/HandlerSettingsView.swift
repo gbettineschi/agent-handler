@@ -27,7 +27,7 @@ struct HandlerSettingsView: View {
                             .accessibilityLabel("Additional conversation IDs")
                     }.padding(.top, 8)
                 }
-            }.frame(maxWidth: .infinity, alignment: .leading)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(16).panelMeasuredHeight(.content)
         }.scrollBounceBehavior(.basedOnSize)
     }
 }
