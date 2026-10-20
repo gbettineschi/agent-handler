@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import ServiceManagement
+import OSLog
 import AgentHandlerCore
 import CodexDesktopAdapter
 import ClaudeDesktopAdapter
@@ -91,7 +92,8 @@ import ClaudeDesktopAdapter
     private var lastDiscovery: TimeInterval = 0
     private var metadataSignature = ""
     private var refreshingDiscovery = false
-    private var discoveryWarning: String?
+    private var catalog = DiscoveryCatalog()
+    private static let discoveryLog = Logger(subsystem: "com.agenthandler.app", category: "Discovery")
     private var demoGeneration = UUID()
     private var ownerTitles: [String: String] = [:]
     var attentionChanged: (() -> Void)?
@@ -184,30 +186,35 @@ import ClaudeDesktopAdapter
             return "\(attrs?[.modificationDate] ?? "missing"):\(attrs?[.size] ?? 0)"
         }.joined(separator: "|")
         let now = ProcessInfo.processInfo.systemUptime
-        if signature != metadataSignature || now - lastDiscovery >= 60 || lastDiscovery == 0 {
-            lastDiscovery = now; metadataSignature = signature
+        if catalog.retryNeeded || signature != metadataSignature || now - lastDiscovery >= 60 || lastDiscovery == 0 {
             let directory = directory
             let result = await Task.detached(priority: .utility) { Result { try ThreadDiscovery.candidates(directory: directory) } }.value
             guard enabled, !sleeping else { return }
-            let candidates: [ThreadCandidate]
-            switch result {
-            case .success(let values):
-                candidates = values; titles = Dictionary(values.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+            let previousDiagnostic = catalog.diagnostic
+            catalog.update(result)
+            if let diagnostic = catalog.diagnostic, diagnostic != previousDiagnostic {
+                Self.discoveryLog.error("\(diagnostic, privacy: .public)")
+            } else if catalog.diagnostic == nil, previousDiagnostic != nil || lastDiscovery == 0 {
+                Self.discoveryLog.notice("Conversation catalog ready: \(self.catalog.candidates.count) candidates")
+            }
+            let candidates = catalog.candidates
+            if !catalog.retryNeeded {
+                lastDiscovery = now; metadataSignature = signature
+                titles = Dictionary(candidates.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
                     .merging(ownerTitles, uniquingKeysWith: { _, native in native })
-                recentConversationIDs = values.map(\.id)
-                discoveryWarning = nil
-            case .failure:
-                candidates = []; discoveryWarning = "Conversation discovery unavailable; add thread IDs in Settings"
+                recentConversationIDs = candidates.map(\.id)
             }
             let pinned = requests.map { $0.id.scope.conversation }
             let explicit = extraThreads.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.utf8.count <= 256 }
             var selected: [String] = []
             for id in pinned + explicit + candidates.map(\.id) where !selected.contains(id) && selected.count < 16 { selected.append(id) }
-            lifecycle.establishBaseline(conversations: Set(selected + candidates.map(\.id)))
+            if !catalog.retryNeeded || !selected.isEmpty {
+                lifecycle.establishBaseline(conversations: Set(selected + candidates.map(\.id)))
+            }
             await adapter.start(threadIDs: Set(selected))
         }
         let state = await adapter.health()
-        trackingWarning = discoveryWarning
+        trackingWarning = catalog.warning
         connectedConversations = state.known; selectedConversations = state.followed; connectionChecked = true
         needsSourceApproval = state.needsSourceApproval
         activities = await adapter.activity()
@@ -215,7 +222,7 @@ import ClaudeDesktopAdapter
         let retained = Set(recentConversationIDs + activities.map { $0.id.conversation } + requests.map { $0.id.scope.conversation })
         ownerTitles = ownerTitles.filter { retained.contains($0.key) }
         titles.merge(ownerTitles, uniquingKeysWith: { _, native in native })
-        health = [discoveryWarning, state.message, await claude.health()].compactMap { $0 }.joined(separator: "\n")
+        health = [catalog.diagnostic, state.message, await claude.health()].compactMap { $0 }.joined(separator: "\n")
         updateSessionPresentation()
         if await core.persistenceFailed { issue = "Responses disabled: delivery tracking is unavailable. Use the source app." }
     }

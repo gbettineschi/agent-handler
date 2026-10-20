@@ -23,4 +23,24 @@ struct DiscoveryTests {
         #expect(candidates.first?.id == "desktop")
         #expect(!candidates.map(\.id).contains("archived"))
     }
+    @Test func lockedCatalogIsDiagnosedAndRecoversAfterUnlock() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("ah-discovery-lock-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var db: OpaquePointer?
+        #expect(sqlite3_open(folder.appendingPathComponent("state_5.sqlite").path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        #expect(sqlite3_exec(db, "CREATE TABLE threads(id TEXT,title TEXT,updated_at INTEGER,archived INTEGER); INSERT INTO threads VALUES('active','Title',1,0)", nil, nil, nil) == SQLITE_OK)
+        #expect(try ThreadDiscovery.candidates(directory: folder).count == 1)
+        #expect(sqlite3_exec(db, "BEGIN EXCLUSIVE", nil, nil, nil) == SQLITE_OK)
+        do {
+            _ = try ThreadDiscovery.candidates(directory: folder)
+            Issue.record("An exclusive catalog lock should be reported")
+        } catch {
+            #expect(String(describing: error).contains("busy"))
+        }
+        #expect(sqlite3_exec(db, "ROLLBACK", nil, nil, nil) == SQLITE_OK)
+        #expect(try ThreadDiscovery.candidates(directory: folder).first?.id == "active")
+    }
+
 }
