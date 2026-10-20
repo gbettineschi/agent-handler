@@ -8,6 +8,7 @@ struct HandlerPanelView: View {
     let toggle: () -> Void
     let collapse: () -> Void
     @State private var drafts: [String: QuestionDraft] = [:]
+    @State private var showSessionList = false
     @Environment(\.colorSchemeContrast) private var contrast
 
     private var expanded: Bool { presentation.expanded }
@@ -17,12 +18,16 @@ struct HandlerPanelView: View {
         if !model.requests.isEmpty { return "\(model.requests.count) \(model.requests.count == 1 ? "needs" : "need") you" }
         if !model.enabled { return "Paused" }
         if model.needsSourceApproval || model.trackingWarning != nil || model.issue != nil { return "Check Desktop" }
-        if !model.demo && model.connectionChecked && model.selectedConversations > 0 && model.connectedConversations == 0 { return "Desktop unavailable" }
+        if !model.demo && model.connectedConversations == 0 { return model.connectionChecked ? "Waiting for Desktop" : "Connecting…" }
         if working > 0 { return "\(working) working" }
         return "Agent Handler"
     }
     private var indicator: String {
-        !model.requests.isEmpty ? "exclamationmark.bubble.fill" : working > 0 ? "ellipsis.circle" : "circle.dotted"
+        if model.issue != nil || model.needsSourceApproval || model.trackingWarning != nil ||
+            model.requests.contains(where: { $0.state != .pending && $0.state != .sending }) {
+            return "exclamationmark.triangle.fill"
+        }
+        return !model.requests.isEmpty ? "exclamationmark.bubble.fill" : working > 0 ? "ellipsis.circle" : "circle.dotted"
     }
 
     var body: some View {
@@ -35,8 +40,7 @@ struct HandlerPanelView: View {
                             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                             Text(issue).font(.callout)
                             Spacer(minLength: 0)
-                            Button { model.issue = nil } label: { Image(systemName: "xmark") }
-                                .buttonStyle(.plain).accessibilityLabel("Dismiss message")
+                            PanelIconButton(title: "Dismiss message", symbol: "xmark") { model.issue = nil }
                         }.padding(12).background(.orange.opacity(0.10))
                 }
                 if model.needsSourceApproval && model.enabled {
@@ -50,20 +54,25 @@ struct HandlerPanelView: View {
                 if model.showSettings {
                     HandlerSettingsView(model: model).padding(16)
                 } else {
-                    if let current {
+                    if let current, !showSessionList {
                         requestNavigation(current)
                         SingleRequestView(view: current, draft: draft(for: current.request),
                                           answer: { model.respond(current.request, answer: $0) })
                             .id(current.request.fingerprint)
+                    } else if !model.sessions.isEmpty {
+                        SessionsView(sessions: model.sessions) { key in
+                            model.selectedRequestID = key
+                            showSessionList = false
+                        }
                     } else { emptyState }
-                    footer
+                    if model.demo { footer }
                 }
             }
         }
         .font(.system(size: 13))
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.98))
+        .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: expanded ? 20 : 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: expanded ? 20 : 15, style: .continuous)
@@ -75,6 +84,7 @@ struct HandlerPanelView: View {
             let live = Set(fingerprints)
             drafts = drafts.filter { live.contains($0.key) }
         }
+        .onChange(of: model.demoScenario) { _, _ in showSessionList = false }
     }
 
     private var header: some View {
@@ -82,7 +92,7 @@ struct HandlerPanelView: View {
             Button(action: toggle) {
                 HStack(spacing: 8) {
                     Image(systemName: indicator)
-                        .foregroundStyle(model.requests.isEmpty ? Color.secondary : .orange)
+                        .foregroundStyle(model.requests.isEmpty && model.issue == nil && !model.needsSourceApproval ? Color.secondary : .orange)
                     Text(expanded ? (model.showSettings ? "Settings" : "Agent Handler") : summary)
                         .font(.system(size: 12, weight: .medium)).lineLimit(1)
                     if model.demo { Text("DEMO").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
@@ -98,13 +108,10 @@ struct HandlerPanelView: View {
                         .padding(.horizontal, 7).padding(.vertical, 3).background(.orange.opacity(0.16), in: Capsule())
                         .foregroundStyle(.orange).accessibilityLabel("\(model.requests.count) \(model.requests.count == 1 ? "request needs" : "requests need") attention")
                 }
-                Button { model.showSettings.toggle() } label: { Image(systemName: model.showSettings ? "arrow.left" : "gearshape") }
-                    .buttonStyle(.plain).frame(width: 24, height: 24)
-                    .accessibilityLabel(model.showSettings ? "Back to requests" : "Settings")
-                    .help(model.showSettings ? "Back to requests" : "Settings")
-                Button(action: collapse) { Image(systemName: "xmark") }
-                    .buttonStyle(.plain).frame(width: 24, height: 24)
-                    .accessibilityLabel("Close panel").help("Collapse panel (Escape)")
+                PanelIconButton(title: model.showSettings ? "Back to requests" : "Settings", symbol: model.showSettings ? "arrow.left" : "gearshape") {
+                    model.showSettings.toggle()
+                }.keyboardShortcut(",", modifiers: .command)
+                PanelIconButton(title: "Close panel (Escape)", symbol: "xmark", action: collapse)
                     .keyboardShortcut(.cancelAction)
             }
         }.padding(.horizontal, expanded ? 16 : 12).frame(height: expanded ? 46 : 30)
@@ -112,7 +119,7 @@ struct HandlerPanelView: View {
 
     private func requestNavigation(_ current: RequestView) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(.secondary)
+            PanelIconButton(title: "All sessions", symbol: "chevron.left") { showSessionList = true }
             Text(model.titles[current.id.scope.conversation] ?? "Desktop conversation")
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 .help(model.titles[current.id.scope.conversation] ?? current.id.scope.conversation)
@@ -120,8 +127,14 @@ struct HandlerPanelView: View {
             if model.requests.count > 1 {
                 Menu {
                     ForEach(Array(model.requests.enumerated()), id: \.element.id) { index, request in
-                        Button("\(index + 1). \(request.request.title.components(separatedBy: .newlines).first ?? "Request")") {
+                        Button {
                             model.selectedRequestID = request.id
+                        } label: {
+                            if current.id == request.id {
+                                Label("\(index + 1). \(request.request.title.components(separatedBy: .newlines).first ?? "Request")", systemImage: "checkmark")
+                            } else {
+                                Text("\(index + 1). \(request.request.title.components(separatedBy: .newlines).first ?? "Request")")
+                            }
                         }
                     }
                 } label: {
@@ -135,8 +148,8 @@ struct HandlerPanelView: View {
         VStack(spacing: 10) {
             Image(systemName: model.enabled ? "checkmark.circle" : "pause.circle")
                 .font(.system(size: 25, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
-            Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Desktop for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Desktop" : "No requests waiting here").font(.headline)
-            Text(working > 0 ? "\(working) Desktop conversation\(working == 1 ? " is" : "s are") working." : model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Details if it stays unavailable." : "Questions and supported approvals appear here.")
+            Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Desktop for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Desktop" : "No pending requests").font(.headline)
+            Text(model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Settings if it stays unavailable." : "Sessions appear here as they become available.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -144,28 +157,22 @@ struct HandlerPanelView: View {
     private var footer: some View {
         HStack(spacing: 6) {
             Image(systemName: "desktopcomputer")
-            Text(connectionSummary)
+            Text("Demo · no agent connection")
                 .lineLimit(1)
             Spacer(minLength: 0)
-            if model.demo { Button("Reset demo") { Task { await model.loadDemo() } }.buttonStyle(.plain) }
-            else { Button("Details") { model.showSettings = true }.buttonStyle(.plain).help("Connection details and settings") }
+                Menu("Examples") {
+                    ForEach(DemoScenario.allCases) { scenario in
+                        Button(scenario.title) { Task { await model.loadDemo(scenario) } }
+                    }
+                    Divider()
+                    Button("Reset example") { Task { await model.loadDemo() } }
+                }.menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Demo examples")
         }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.vertical, 12)
             .overlay(alignment: .top) { Divider() }
     }
 
     private func draft(for request: AttentionRequest) -> Binding<QuestionDraft> {
         Binding(get: { drafts[request.fingerprint] ?? QuestionDraft() }, set: { drafts[request.fingerprint] = $0 })
-    }
-    private var connectionSummary: String {
-        if model.demo { return "Demo · no agent connection" }
-        if !model.enabled { return "Tracking paused" }
-        if !model.connectionChecked { return "Connecting to Desktop…" }
-        if model.selectedConversations == 0 { return "No Work conversations selected" }
-        if model.connectedConversations == 0 { return "Desktop unavailable · check Details" }
-        if model.connectedConversations < model.selectedConversations {
-            return "\(model.connectedConversations) of \(model.selectedConversations) conversations connected"
-        }
-        return "\(model.connectedConversations) Desktop conversations connected"
     }
 }
 
@@ -185,8 +192,14 @@ private struct SingleRequestView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     switch view.request.content {
                     case .question(let options, let allowsText):
-                        Text(view.request.title).font(.system(size: 17, weight: .semibold)).textSelection(.enabled)
+                        let paragraphs = view.request.title.components(separatedBy: "\n\n")
+                        Text(paragraphs.first ?? view.request.title).font(.system(size: 17, weight: .semibold)).textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
+                        if paragraphs.count > 1 {
+                            Text(paragraphs.dropFirst().joined(separator: "\n\n")).font(.system(size: 13))
+                                .foregroundStyle(.secondary).textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         ForEach(options, id: \.id) { option in
                             Button { draft.select(option.id) } label: {
                                 HStack(alignment: .top, spacing: 10) {
@@ -194,10 +207,8 @@ private struct SingleRequestView: View {
                                         .foregroundStyle(draft.choice == option.id ? Color.accentColor : .secondary)
                                     Text(option.label).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                                     Spacer(minLength: 0)
-                                }.padding(11).frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(.white.opacity(draft.choice == option.id ? 0.10 : 0.04), in: RoundedRectangle(cornerRadius: 10))
-                                    .contentShape(RoundedRectangle(cornerRadius: 10))
-                            }.buttonStyle(.plain).disabled(view.state != .pending)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }.buttonStyle(RequestActionStyle(selected: draft.choice == option.id)).disabled(view.state != .pending)
                                 .accessibilityAddTraits(draft.choice == option.id ? [.isSelected] : [])
                         }
                         if allowsText {
@@ -220,16 +231,17 @@ private struct SingleRequestView: View {
                         }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 16)
-            }.scrollBounceBehavior(.basedOnSize)
+            }.scrollBounceBehavior(.basedOnSize).scrollIndicators(.visible)
             Divider()
             switch view.request.content {
             case .question(let options, let allowsText):
                 HStack {
-                    Text("Review before sending").font(.caption).foregroundStyle(.secondary)
+                    Text("⌘↵ to send").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Command Return to send")
                     Spacer()
                     Button(view.state == .sending ? "Sending…" : "Send answer") {
                         if let value = draft.answer(options: options, allowsText: allowsText) { answer(value) }
                     }.buttonStyle(.borderedProminent).controlSize(.large)
+                        .keyboardShortcut(.return, modifiers: .command).help("Send answer (⌘Return)")
                         .disabled(view.state != .pending || draft.answer(options: options, allowsText: allowsText) == nil)
                 }.padding(16)
             case .approval(let choices):
@@ -259,11 +271,13 @@ private struct SingleRequestView: View {
 /// macOS's bordered push-button bezel truncates multiline labels. Keep the
 /// native Button semantics while giving each exact permission scope room to wrap.
 private struct RequestActionStyle: ButtonStyle {
+    var selected = false
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.colorSchemeContrast) private var contrast
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(configuration.isPressed ? 0.18 : 0.07), in: RoundedRectangle(cornerRadius: 10))
-            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.10)) }
+            .background(.white.opacity(configuration.isPressed ? 0.18 : selected ? 0.12 : 0.05), in: RoundedRectangle(cornerRadius: 10))
+            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.accentColor : .white.opacity(contrast == .increased ? 0.55 : 0.14), lineWidth: selected ? 1.5 : 1) }
             .contentShape(RoundedRectangle(cornerRadius: 10))
             .opacity(enabled ? 1 : 0.45)
     }

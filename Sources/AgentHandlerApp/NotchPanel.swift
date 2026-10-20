@@ -26,21 +26,30 @@ final class AttentionPanel: NSPanel {
         panel.title = "Agent Handler"
         NotificationCenter.default.addObserver(self, selector: #selector(menuBegan), name: NSMenu.didBeginTrackingNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(menuEnded), name: NSMenu.didEndTrackingNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(focusLost), name: NSWindow.didResignKeyNotification, object: panel)
         panel.dismiss = { [weak self] in self?.collapse() }
         // A stable hosting tree preserves drafts while the window is collapsed.
-        panel.contentView = NSHostingView(rootView: HandlerPanelView(model: model, presentation: presentation,
+        let host = NSHostingView(rootView: HandlerPanelView(model: model, presentation: presentation,
             toggle: { [weak self] in self?.toggle() }, collapse: { [weak self] in self?.collapse() }))
+        // PanelPlacement owns window dimensions. Intrinsic-size propagation can
+        // otherwise make a scrollable error state expand the window itself.
+        host.sizingOptions = []
+        panel.contentView = host
         model.$showSettings.combineLatest(model.$requests, model.$selectedRequestID).sink { [weak self] _, _, _ in
             Task { @MainActor [weak self] in self?.place() }
         }.store(in: &observations)
-        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismissIfOutside() }
+        model.$activities.combineLatest(model.$claudeActivities).sink { [weak self] _, _ in
+            Task { @MainActor [weak self] in self?.place() }
+        }.store(in: &observations)
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, event.windowNumber != self.panel.windowNumber else { return }
+                self.dismissIfOutside(event)
+            }
         }) { eventMonitors.append(monitor) }
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
             MainActor.assumeIsolated {
                 guard let self, event.window !== self.panel else { return }
-                self.dismissIfOutside()
+                self.dismissIfOutside(event)
             }
             return event
         }) { eventMonitors.append(monitor) }
@@ -57,24 +66,19 @@ final class AttentionPanel: NSPanel {
     }
     func showSettings() { presentation.expanded = true; model.showSettings = true; place(); panel.makeKeyAndOrderFront(nil) }
     func refresh() { place() }
-    private func dismissIfOutside() {
-        guard presentation.expanded, !menuTracking, !panel.frame.contains(NSEvent.mouseLocation) else { return }
+    private func dismissIfOutside(_ event: NSEvent) {
+        let point = event.window?.convertPoint(toScreen: event.locationInWindow) ?? event.locationInWindow
+        guard presentation.expanded, !menuTracking, !panel.frame.contains(point) else { return }
         collapse()
     }
     @objc private func menuBegan() { menuTracking = true }
     @objc private func menuEnded() { menuTracking = false }
-    @objc private func focusLost() {
-        Task { @MainActor [weak self] in
-            guard let self, !self.menuTracking, !self.panel.isKeyWindow else { return }
-            self.collapse()
-        }
-    }
     private func place() {
-        let screen = NSScreen.screens.first { String(describing: $0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? "") == model.displayID } ?? NSScreen.main ?? NSScreen.screens.first
+        let screen = NSScreen.screens.first { $0.handlerDisplayID == model.displayID } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let approval: Bool
         if let content = model.displayedRequest?.request.content, case .approval = content { approval = true } else { approval = false }
-        let height: CGFloat = model.showSettings || approval ? 480 : (model.requests.isEmpty ? 260 : 400)
+        let height: CGFloat = model.showSettings || approval ? 480 : (model.requests.isEmpty && model.sessions.isEmpty ? 260 : 400)
         panel.setFrame(PanelPlacement.frame(screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top,
                                            expanded: presentation.expanded, contentHeight: height), display: true)
         panel.orderFrontRegardless()

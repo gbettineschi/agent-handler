@@ -16,8 +16,8 @@ struct HandlerSettingsView: View {
                     Text("Appearance & startup").font(.headline)
                     Picker("Display", selection: $model.displayID) {
                         Text("Main display").tag("automatic")
-                        ForEach(NSScreen.screens, id: \.localizedName) { screen in
-                            Text(screen.localizedName).tag(String(describing: screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? ""))
+                    ForEach(NSScreen.screens, id: \.handlerDisplayID) { screen in
+                            Text(screen.localizedName).tag(screen.handlerDisplayID)
                         }
                     }
                     Toggle("Launch at login", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) })).disabled(model.demo)

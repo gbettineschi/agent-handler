@@ -19,7 +19,12 @@ import ClaudeDesktopAdapter
     @Published var issue: String?
     @Published var showSettings = false
     @Published var selectedRequestID: RequestKey?
-    var displayedRequest: RequestView? { requests.first { $0.id == selectedRequestID } ?? requests.first }
+    @Published var demoScenario: DemoScenario = .questions
+    @Published var recentConversationIDs: [String] = []
+    var sessions: [SessionSummary] {
+        SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs)
+    }
+    var displayedRequest: RequestView? { requests.first { $0.id == selectedRequestID } ?? SessionSummary.preferredRequest(requests) }
     @Published var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: "desktopEnabled"); Task { await reconfigure() } } }
     @Published var displayID: String { didSet { UserDefaults.standard.set(displayID, forKey: "displayID"); placementChanged?() } }
     @Published var extraThreads: String { didSet { UserDefaults.standard.set(extraThreads, forKey: "extraThreads"); lastDiscovery = 0 } }
@@ -39,6 +44,7 @@ import ClaudeDesktopAdapter
     private var metadataSignature = ""
     private var refreshingDiscovery = false
     private var discoveryWarning: String?
+    private var demoGeneration = UUID()
     var placementChanged: (() -> Void)?
     var attentionChanged: (() -> Void)?
 
@@ -130,6 +136,7 @@ import ClaudeDesktopAdapter
             switch result {
             case .success(let values):
                 candidates = values; titles = Dictionary(values.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+                recentConversationIDs = values.map(\.id)
                 discoveryWarning = nil
             case .failure:
                 candidates = []; discoveryWarning = "Conversation discovery unavailable; add thread IDs in Settings"
@@ -156,22 +163,36 @@ import ClaudeDesktopAdapter
             catch { issue = "This request changed or cannot be answered here. Refresh it in the source app." }
         }
     }
-    func loadDemo() async {
+    func loadDemo(_ scenario: DemoScenario? = nil) async {
+        guard demo else { return }
+        let generation = UUID(); demoGeneration = generation
+        if let scenario { demoScenario = scenario }
+        let scenario = demoScenario
         let scope = RequestScope(installation: "demo", conversation: "Demo conversation"), turn = UUID().uuidString
         let epoch = await core.begin(scope: scope)
-        let questions = [
-            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("first")), owner: "demo", title: "Which option should I use?",
-                             content: .question(options: [.init(id: "simple", label: "Keep it simple"), .init(id: "details", label: "Show the details")], allowsText: true)),
-            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("second")), owner: "demo", title: "Anything else I should consider?", content: .question(options: [], allowsText: true)),
-            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string("third")), owner: "demo",
-                title: "Run command?\n\n/usr/bin/printf 'This is a synthetic approval — no command will run.\\n'\n\nDirectory: /Users/example/Projects/agent-handler\n\nAllow a harmless connection check?",
-                content: .approval(choices: [.init(id: "accept", label: "Allow once"),
-                    .init(id: "rule", label: "Allow and save command rule: [\"/usr/bin/printf\",\"This is a synthetic approval — no command will run.\"]"),
-                    .init(id: "cancel", label: "Cancel turn")]))
-        ]
+        guard demoGeneration == generation else { return }
+        let questions = scenario.requests(scope: scope, turn: turn)
         await core.observe(.init(scope: scope, epoch: epoch, revision: 1, requests: questions))
+        guard demoGeneration == generation else { return }
+        selectedRequestID = questions.first?.key
+        issue = nil
+        if scenario == .unavailable { await core.invalidate(scope: scope, epoch: epoch) }
+        if scenario == .uncertain, let first = questions.first {
+            try? await core.respond(key: first.key, fingerprint: first.fingerprint, answer: .decision("accept"), using: DemoTransport(outcome: .uncertain))
+        }
+        guard demoGeneration == generation else { return }
         health = "DEMO · synthetic requests, no agent connection"
         titles[scope.conversation] = "Agent Handler interface test"
+        var demoActivity = ActivityStore()
+        for (conversation, phase) in [(scope.conversation, ActivityPhase.running), ("demo-earlier", .completed), ("demo-other", .failed)] {
+            let activityScope = RequestScope(installation: "demo", conversation: conversation)
+            let activityEpoch = demoActivity.begin(scope: activityScope)
+            demoActivity.observe(.init(scope: activityScope, epoch: activityEpoch, revision: 1, turnID: "demo-turn", phase: phase, attention: .clear))
+        }
+        activities = demoActivity.views
+        titles["demo-earlier"] = "Review the latest changes"
+        titles["demo-other"] = "Run the optional integration check"
+        recentConversationIDs = [scope.conversation, "demo-earlier", "demo-other"]
     }
     func setLogin(_ enabled: Bool) {
         do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
@@ -180,9 +201,6 @@ import ClaudeDesktopAdapter
     }
 }
 
-private struct DemoTransport: ResponseTransport {
-    func deliver(_ attempt: ResponseAttempt) async -> DeliveryOutcome { .accepted }
-}
 private struct DisabledLedger: DeliveryLedger {
     struct Unavailable: Error {}
     func reserve(key: RequestKey, fingerprint: String, attemptID: UUID) throws { throw Unavailable() }
