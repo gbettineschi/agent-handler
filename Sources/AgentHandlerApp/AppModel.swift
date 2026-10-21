@@ -11,6 +11,8 @@ import ClaudeDesktopAdapter
     @Published var activities: [ActivityView] = []
     @Published var claudeActivities: [ActivityView] = []
     @Published var titles: [String: String] = [:]
+    @Published var codexUsage: CodexUsageSnapshot?
+    var usageHeader: UsageHeader { UsageHeader(snapshot: codexUsage, now: Date()) }
     @Published var health = "Starting…"
     @Published var connectedConversations = 0
     @Published var selectedConversations = 0
@@ -109,6 +111,7 @@ import ClaudeDesktopAdapter
     private var watching: Task<Void, Never>?
     private var refreshing: Task<Void, Never>?
     private var observingClaude: Task<Void, Never>?
+    private var refreshingUsage: Task<Void, Never>?
     private var tokens: [NSObjectProtocol] = []
     private var sleeping = false
     private var lastDiscovery: TimeInterval = 0
@@ -171,6 +174,7 @@ import ClaudeDesktopAdapter
             }
         }
         if demo { Task { await loadDemo() }; return }
+        startUsageRefresh()
         refreshing = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refreshDiscovery()
@@ -193,6 +197,7 @@ import ClaudeDesktopAdapter
         tokens.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }; self.sleeping = true
+                self.refreshingUsage?.cancel(); self.refreshingUsage = nil; self.codexUsage = nil
                 await self.adapter.stop(); await self.claude.stop()
                 self.activities = await self.adapter.activity(); self.claudeActivities = await self.claude.activity()
                 self.connectedConversations = 0; self.connectionChecked = false
@@ -200,17 +205,35 @@ import ClaudeDesktopAdapter
             }
         })
         tokens.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in guard let self else { return }; self.sleeping = false; self.lastDiscovery = 0; await self.refreshDiscovery() }
+            Task { @MainActor in guard let self else { return }; self.sleeping = false; self.lastDiscovery = 0; self.startUsageRefresh(); await self.refreshDiscovery() }
         })
     }
 
     private func reconfigure() async {
         guard !demo else { return }
+        refreshingUsage?.cancel(); refreshingUsage = nil; codexUsage = nil
+        if enabled, !sleeping { startUsageRefresh() }
         await adapter.stop(); await claude.stop()
         activities = await adapter.activity(); claudeActivities = await claude.activity(); lastDiscovery = 0
         connectedConversations = 0; connectionChecked = false
         needsSourceApproval = false
         await refreshDiscovery()
+    }
+    private func startUsageRefresh() {
+        guard !demo, enabled, !sleeping, refreshingUsage == nil else { return }
+        refreshingUsage = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let bundle = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex")
+                let executable = bundle?.appendingPathComponent("Contents/Resources/codex-cli/bin/codex")
+                let reading: CodexUsageSnapshot?
+                if let executable { reading = try? await CodexUsageReader.read(executable: executable, directory: directory) }
+                else { reading = nil }
+                guard !Task.isCancelled, enabled, !sleeping else { return }
+                codexUsage = reading
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
     }
     private func refreshDiscovery() async {
         guard !demo, !sleeping, !refreshingDiscovery else { return }
@@ -276,6 +299,7 @@ import ClaudeDesktopAdapter
     }
     func loadDemo(_ scenario: DemoScenario? = nil) async {
         guard demo else { return }
+        codexUsage = try? CodexUsageSnapshot.decode(Data("{\"rateLimits\":{\"primary\":{\"usedPercent\":29,\"windowDurationMins\":10080,\"resetsAt\":\(Date().addingTimeInterval(500_000).timeIntervalSince1970)}}}".utf8))
         lifecycle = SessionLifecycle(); ordering = SessionOrdering(); dismissal = nil; autoOpenPolicy = AutoOpenPolicy()
         let generation = UUID(); demoGeneration = generation
         if let scenario { demoScenario = scenario }

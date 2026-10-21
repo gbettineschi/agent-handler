@@ -93,6 +93,8 @@ import AgentHandlerCore
             ("uncertain", .uncertain, 420, 480, true, false, false),
             ("sessions", .empty, 420, 400, true, false, false),
             ("sessions-narrow", .empty, 340, 400, true, false, false),
+            ("quota-narrow", .questions, 340, 400, true, false, false),
+            ("quota-unavailable", .empty, 420, 400, true, false, false),
             ("sessions-thinking", .empty, 420, 400, true, false, false),
             ("finished-expired", .empty, 420, 400, true, false, false),
             ("sessions-long-titles", .empty, 420, 400, true, false, false),
@@ -160,6 +162,11 @@ import AgentHandlerCore
             if name == "empty" {
                 model.activities = []; model.requests = []; model.updateSessionPresentation()
                 precondition(model.sessions.isEmpty)
+            }
+            if name == "quota-unavailable" { model.codexUsage = nil }
+            if name == "quota-narrow", let finished = model.sessions.first(where: \.isFinished) {
+                model.dismissSession(finished)
+                precondition(!model.hiddenSessions.isEmpty && !model.requests.isEmpty)
             }
             let presentation = PanelPresentation()
             presentation.expanded = expanded

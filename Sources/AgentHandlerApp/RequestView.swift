@@ -94,10 +94,25 @@ struct HandlerPanelView: View {
             Image(nsImage: AgentStatusIcon.image(mode: model.menuBarState.mode))
                 .frame(width: 16, height: 16).help("Agent Handler status")
                 .accessibilityHidden(true)
-            Text(model.showSettings ? "Settings" : "Agent Handler")
-                .font(.system(size: 13, weight: .semibold))
-                .accessibilityAddTraits(.isHeader)
-            if model.demo { Text("DEMO").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
+            if model.showSettings {
+                Text("Settings").font(.system(size: 13, weight: .semibold)).accessibilityAddTraits(.isHeader)
+            } else {
+                let usage = model.usageHeader
+                ViewThatFits(in: .horizontal) {
+                    usageLabel(usage, compact: false)
+                    usageLabel(usage, compact: true)
+                    Text("Codex \(usage.remaining.replacingOccurrences(of: " left", with: ""))")
+                        .font(.system(size: 11)).monospacedDigit().lineLimit(1)
+                }.help(usage.help).accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Codex \(usage.remaining)\(usage.reset.map { ", resets in \($0)" } ?? "")")
+            }
+            // The footer always labels demo mode; keep the header badge only when it fits.
+            if model.demo {
+                ViewThatFits(in: .horizontal) {
+                    Text("DEMO").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary).fixedSize()
+                    Color.clear.frame(width: 0, height: 0)
+                }.layoutPriority(-1)
+            }
             Spacer(minLength: 0)
             if expanded {
                 if !model.hiddenSessions.isEmpty {
@@ -123,6 +138,16 @@ struct HandlerPanelView: View {
                     .keyboardShortcut(.cancelAction)
             }
         }.padding(.horizontal, expanded ? 16 : 12).frame(height: expanded ? 46 : 30)
+    }
+
+    private func usageLabel(_ usage: UsageHeader, compact: Bool) -> some View {
+        HStack(spacing: 4) {
+            Text("Codex").foregroundStyle(.secondary)
+            Text(compact ? usage.remaining.replacingOccurrences(of: " left", with: "") : usage.remaining).monospacedDigit()
+            if let reset = usage.reset {
+                Text(compact ? "· \(reset)" : "· resets in \(reset)").foregroundStyle(.secondary).monospacedDigit()
+            }
+        }.font(.system(size: 11)).lineLimit(1).fixedSize()
     }
 
     private func requestNavigation(_ current: RequestView) -> some View {
