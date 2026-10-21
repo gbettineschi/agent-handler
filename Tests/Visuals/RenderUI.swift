@@ -94,6 +94,7 @@ import AgentHandlerCore
             ("sessions", .empty, 420, 400, true, false, false),
             ("sessions-narrow", .empty, 340, 400, true, false, false),
             ("sessions-thinking", .empty, 420, 400, true, false, false),
+            ("finished-expired", .empty, 420, 400, true, false, false),
             ("sessions-long-titles", .empty, 420, 400, true, false, false),
             ("sessions-countdown", .empty, 420, 400, true, false, false),
             ("sessions-undo", .empty, 420, 400, true, false, false),
@@ -111,6 +112,10 @@ import AgentHandlerCore
             if scenario == .unavailable { precondition(model.requests.allSatisfy { $0.state == .unavailable }) }
             if scenario == .uncertain { precondition(model.requests.count == 1 && model.requests[0].state == .uncertain) }
             if scenario == .empty { precondition(model.requests.isEmpty && model.sessions.count == 3) }
+            if name == "finished-expired" {
+                model.updateSessionPresentation(now: Date().addingTimeInterval(301))
+                precondition(model.sessions.count == 1 && model.sessions.allSatisfy { !$0.isFinished })
+            }
             if name == "sessions-thinking" {
                 var activity = ActivityStore()
                 for entry in model.activities {

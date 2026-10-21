@@ -3,12 +3,14 @@ import AgentHandlerCore
 
 /// Presentation only. Never changes provider subscriptions, request authority or delivery.
 struct SessionLifecycle: Codable {
+    static let finishedLifetime: TimeInterval = 300
     private struct Record: Codable {
         var scope: RequestScope
         var turn: String?
         var active: Bool
         var terminalObserved: Bool
         var finishedAt: Date?
+        var expiresAt: Date?
         var dismissed = false
     }
     private var records: [Record] = []
@@ -19,58 +21,73 @@ struct SessionLifecycle: Codable {
         if launchConversations == nil { launchConversations = conversations }
     }
 
-    mutating func observe(_ sessions: [SessionSummary], now: Date) {
+    /// Returns terminal transitions observed this run, never launch history.
+    @discardableResult mutating func observe(_ sessions: [SessionSummary], now: Date) -> [SessionSummary] {
+        var newlyFinished: [SessionSummary] = []
         for session in sessions {
             let firstThisRun = seenThisRun.insert(session.id).inserted
             let newlyDiscovered = launchConversations.map { !$0.contains(session.id.conversation) } ?? false
             let active = session.status == .running || session.status == .needsInput || session.request != nil
             guard let index = records.firstIndex(where: { $0.scope == session.id }) else {
-                // Existing completions at launch are history, not new notifications.
                 records.append(.init(scope: session.id, turn: session.turnID, active: active, terminalObserved: session.isFinished,
-                                     finishedAt: session.isFinished && newlyDiscovered ? now : nil))
+                    finishedAt: session.isFinished && newlyDiscovered ? now : nil,
+                    expiresAt: session.isFinished ? now.addingTimeInterval(Self.finishedLifetime) : nil))
                 continue
             }
-            var record = records[index]
+            let previous = records[index]
+            var record = previous
             if let turn = session.turnID, turn != record.turn {
                 record = .init(scope: session.id, turn: turn, active: active, terminalObserved: session.isFinished,
-                               finishedAt: session.isFinished && (!firstThisRun || newlyDiscovered) ? now : nil)
+                    finishedAt: session.isFinished && (!firstThisRun || newlyDiscovered) ? now : nil,
+                    expiresAt: session.isFinished ? now.addingTimeInterval(Self.finishedLifetime) : nil)
             } else if active {
                 record.active = true; record.terminalObserved = false
-                record.finishedAt = nil; record.dismissed = false
+                record.finishedAt = nil; record.expiresAt = nil; record.dismissed = false
             } else if session.isFinished && !record.terminalObserved {
                 record.finishedAt = record.active && (!firstThisRun || newlyDiscovered) ? now : nil
                 record.active = false; record.terminalObserved = true
             }
+            // Also migrates older saved records. A known finish deadline never restarts.
+            if session.isFinished, record.expiresAt == nil {
+                record.expiresAt = (record.finishedAt ?? now).addingTimeInterval(Self.finishedLifetime)
+            }
+            if !firstThisRun, session.isFinished, record.finishedAt != nil, record.finishedAt != previous.finishedAt {
+                newlyFinished.append(session)
+            }
             records[index] = record
         }
-        // Retain a bounded number of dismissed turns, preferring current sessions.
         if records.count > 256 {
             let current = Set(sessions.map(\.id))
             records = Array((records.filter { current.contains($0.scope) } + records.filter { !current.contains($0.scope) }).prefix(256))
         }
+        return newlyFinished
     }
     mutating func dismiss(_ session: SessionSummary) {
         guard session.isFinished, session.request == nil,
               let index = records.firstIndex(where: { $0.scope == session.id && $0.turn == session.turnID }) else { return }
         records[index].dismissed = true
     }
-    @discardableResult mutating func restoreDismissed(_ session: SessionSummary) -> Bool {
+    @discardableResult mutating func restoreDismissed(_ session: SessionSummary, now: Date = Date()) -> Bool {
         guard session.isFinished,
-              let index = records.firstIndex(where: { $0.scope == session.id && $0.turn == session.turnID && $0.dismissed }) else { return false }
+              let index = records.firstIndex(where: { $0.scope == session.id && $0.turn == session.turnID && $0.dismissed }),
+              records[index].expiresAt.map({ $0 > now }) ?? true else { return false }
         records[index].dismissed = false
         return true
     }
-    func hidden(_ sessions: [SessionSummary]) -> [SessionSummary] {
+    func hidden(_ sessions: [SessionSummary], now: Date = Date()) -> [SessionSummary] {
         sessions.filter { session in
-            session.isFinished && records.contains { $0.scope == session.id && $0.turn == session.turnID && $0.dismissed }
+            session.isFinished && records.contains {
+                $0.scope == session.id && $0.turn == session.turnID && $0.dismissed && ($0.expiresAt.map { $0 > now } ?? true)
+            }
         }
     }
-    func visible(_ sessions: [SessionSummary]) -> [SessionSummary] {
+    func visible(_ sessions: [SessionSummary], now: Date = Date()) -> [SessionSummary] {
         sessions.compactMap { session in
             guard let record = records.first(where: { $0.scope == session.id && $0.turn == session.turnID }) else { return session }
-            if record.dismissed && session.isFinished && session.request == nil { return nil }
+            if session.isFinished && (record.dismissed || (record.expiresAt.map { $0 <= now } ?? false)) { return nil }
             var result = session
-            result.recentUntil = session.isFinished ? record.finishedAt?.addingTimeInterval(300) : nil
+            result.recentUntil = session.isFinished ? record.finishedAt?.addingTimeInterval(Self.finishedLifetime) : nil
+            result.expiresAt = session.isFinished ? record.expiresAt : nil
             return result
         }
     }

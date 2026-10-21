@@ -12,12 +12,22 @@ struct HandlerSettingsView: View {
                     Text("Questions and supported approvals from recent local Work conversations.").font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Open automatically").font(.headline)
+                    Toggle("Blocking questions or approvals", isOn: $model.autoOpenSettings.blocking).disabled(model.demo)
+                    Toggle("When a session finishes", isOn: $model.autoOpenSettings.finished).disabled(model.demo)
+                        .help("Includes completion, failure and cancellation. Existing history does not trigger an opening.")
+                    Toggle("Non-blocking questions", isOn: $model.autoOpenSettings.nonBlocking).disabled(model.demo)
+                    Text("Codex questions are non-blocking. Automatic opens keep keyboard focus in your current app.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Divider()
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Startup").font(.headline)
                     Toggle("Launch at login", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) })).disabled(model.demo)
                     Text("Escape or click outside to close. Drafts stay until their request ends. Control-click the menu-bar icon for commands.").font(.caption).foregroundStyle(.secondary)
                 }
-                Text("The menu-bar number includes active sessions and finishes from the last five minutes. Hide finished rows with ×; new activity brings them back.").font(.caption).foregroundStyle(.secondary)
+                Text("The menu-bar number includes active sessions and finishes from the last five minutes. Finished rows disappear after five minutes, or you can hide them with ×. New activity brings them back.").font(.caption).foregroundStyle(.secondary)
                 Divider()
                 DisclosureGroup("Connection details") {
                     VStack(alignment: .leading, spacing: 10) {

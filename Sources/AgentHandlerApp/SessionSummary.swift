@@ -8,12 +8,13 @@ struct SessionSummary: Identifiable {
     let request: RequestView?
     var turnID: String? = nil
     var recentUntil: Date? = nil
+    var expiresAt: Date? = nil
     var activityDetail: ActivityDetail? = nil
     var sourceLabel: String { isClaude ? "Claude" : "Codex" }
     var isFinished: Bool { [.completed, .failed, .cancelled].contains(status) && request == nil }
     func remaining(at now: Date) -> String? {
-        guard let recentUntil, recentUntil > now else { return nil }
-        let seconds = min(300, Int(ceil(recentUntil.timeIntervalSince(now))))
+        guard let deadline = expiresAt ?? recentUntil, deadline > now else { return nil }
+        let seconds = min(300, Int(ceil(deadline.timeIntervalSince(now))))
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
     var isClaude: Bool { id.installation.hasPrefix("claude-local-audit:") }

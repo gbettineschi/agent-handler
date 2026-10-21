@@ -1,6 +1,6 @@
 # Menu-bar interface review
 
-The floating notch pill has been removed. A native NSStatusItem opens a bounded panel under its actual button. A hidden/offscreen Ice anchor is clamped to the display; reopening the app bundle provides a way to reach the panel before revealing the item. No hover expansion or incoming-request auto-open is used. The selected menu-bar item stays highlighted while its panel is open.
+The floating notch pill has been removed. A native NSStatusItem opens a bounded panel under its actual button. A hidden/offscreen Ice anchor is clamped to the display; reopening the app bundle provides a way to reach the panel before revealing the item. No hover expansion is used. Independent settings control automatic opening for blocking input, finished sessions, and non-blocking questions; only blocking input defaults to on. Automatic opening does not take keyboard focus or replace an already-open route. The selected menu-bar item stays highlighted while its panel is open.
 
 ## States and count
 
@@ -14,7 +14,7 @@ The floating notch pill has been removed. A native NSStatusItem opens a bounded 
 | Paused | Pause badge |
 | Idle | Still agent glyph and zero |
 
-The number counts active sessions plus observed finishes younger than 300 seconds, once per session. Finished rows show the remaining countdown and remain in the list after the number expires. Their × hides only that finished turn; subscriptions continue, and new/resumed activity or unresolved input becomes visible again. Dismissals and finish times survive app restart. Launch-history completions do not receive a fresh countdown; the initial baseline includes explicit and pinned subscriptions as well as discovered chats. A newly discovered finished chat after that baseline can enter the count.
+The number counts active sessions plus observed finishes younger than 300 seconds, once per session. Finished rows show their remaining countdown and disappear after 300 seconds; deadlines survive restart. Their × hides only that finished turn; subscriptions continue, and new/resumed activity or unresolved input becomes visible again. Dismissals and finish times survive app restart. Launch-history completions receive only a display expiry grace period, without being counted or announced as new finishes; the initial baseline includes explicit and pinned subscriptions as well as discovered chats. A newly discovered finished chat after that baseline can enter the count.
 
 Reduce Motion stops both glyph motion and the short opening fade. The window has one animation owner and never combines a window resize animation with a SwiftUI spring. Exact approval choices remain multiline buttons without a default keyboard action.
 
@@ -36,7 +36,7 @@ Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real control
 | Sessions without requests, dismiss controls | [Image](images/ui/sessions.png) |
 | Narrow and long titles | [Narrow](images/ui/sessions-narrow.png), [long titles](images/ui/sessions-long-titles.png) |
 | Countdown and Undo | [Countdown](images/ui/sessions-countdown.png), [Undo](images/ui/sessions-undo.png) |
-| Sixteen sessions and empty | [Many](images/ui/sessions-many.png), [empty](images/ui/empty.png) |
+| Seventeen sessions and empty | [Many](images/ui/sessions-many.png), [empty](images/ui/empty.png) |
 | Settings | [Image](images/ui/settings.png) |
 | High-contrast window appearance | [Image](images/ui/appearance-high-contrast.png) |
 
@@ -71,3 +71,14 @@ Rows show Codex or Claude instead of Work. Running rows have a native progress i
 Codex activity hints come only from the latest item in the newest validated running turn. A native reasoning marker may show Thinking; tools/messages need explicit inProgress status for their specific labels. Completed/unknown items fall back to Running rather than reviving older activity. Thinking is a latest-activity hint, not a claim of continuously measured model computation. No reasoning content or message body is read for these hints, and the bounded JSON projection is unchanged. The app reads the in-memory activity state once per second. Hints clear on disconnected/replaced owners, invalid snapshots, input, or completion.
 
 The [thinking fixture](images/ui/sessions-thinking.png) uses the real ActivityStore path. Native live inspection showed Codex labels and successive Running/Thinking changes in two real conversations, plus the labeled Hidden menu. Individual command/edit/search/tool hint shapes are fixture-verified; no native command was launched solely to manufacture a UI state.
+
+
+## Automatic opening and finished-session expiry
+
+Finished rows have a durable five-minute display deadline, including historical rows first seen at launch. The menu-bar count still distinguishes newly observed finishes from launch history. Expired or dismissed records do not stop source observation; resumed activity, a new turn or unresolved input returns to the list. Undo and Hidden preserve the deadline. An expired manually hidden turn cannot be restored.
+
+The Open automatically settings group has independent blocking input (default on), finish (off), and non-blocking question (off) switches. Current Codex native questions are asynchronous and use the non-blocking switch. Supported pending approvals and Claude's explicit read-only permission-wait signal use blocking. Unknown state never substitutes for a confirmed blocking request. Pending request keys are consumed once, including while options are off; reconnects and re-enabling a preference do not replay them. Terminal notifications come from transitions observed this run; initial terminal snapshots do not open the panel. Completed, failed and cancelled turns all qualify as endings.
+
+Automatic presentation preserves keyboard focus in the other app, and leaves the selected question/settings alone if the panel is already open. Manual opening still makes the panel key for keyboard use. No answer or approval is ever submitted by this policy.
+
+The [expired fixture](images/ui/finished-expired.png) verifies that only the still-running session remains after the deadline. Settings rendering includes all three switches within the adaptive height limit.

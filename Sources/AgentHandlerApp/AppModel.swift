@@ -31,18 +31,26 @@ import ClaudeDesktopAdapter
     private var observedSessions: [SessionSummary] {
         SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs)
     }
-    var hiddenSessions: [SessionSummary] { lifecycle.hidden(observedSessions) }
-    var sessions: [SessionSummary] { lifecycle.visible(observedSessions) }
+    var hiddenSessions: [SessionSummary] { lifecycle.hidden(observedSessions, now: sessionClock) }
+    var sessions: [SessionSummary] { lifecycle.visible(observedSessions, now: sessionClock) }
     var menuBarState: MenuBarState {
         MenuBarState(sessions: sessions, now: sessionClock, enabled: enabled,
                      warning: issue != nil || trackingWarning != nil || needsSourceApproval)
     }
     func updateSessionPresentation(now: Date = Date()) {
-        lifecycle.observe(observedSessions, now: now)
-        if let dismissal, !dismissal.canUndo(in: observedSessions, now: now) { self.dismissal = nil }
+        let observed = observedSessions
+        let newlyFinished = lifecycle.observe(observed, now: now)
+        if let dismissal, !dismissal.canUndo(in: observed, now: now) ||
+            !lifecycle.hidden(observed, now: now).contains(where: { $0.id == dismissal.session.id && $0.turnID == dismissal.session.turnID }) {
+            self.dismissal = nil
+        }
         sessionClock = now
         persistLifecycle()
         attentionChanged?()
+        if let target = autoOpenPolicy.update(requests: requests, sessions: observed, newlyFinished: newlyFinished,
+                                              settings: autoOpenSettings, enabled: enabled && !sleeping && !demo) {
+            autoOpenRequested?(target)
+        }
     }
     func dismissSession(_ session: SessionSummary) {
         guard session.isFinished else { return }
@@ -78,6 +86,11 @@ import ClaudeDesktopAdapter
     @Published var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: "desktopEnabled"); Task { await reconfigure() } } }
     @Published var extraThreads: String { didSet { UserDefaults.standard.set(extraThreads, forKey: "extraThreads"); lastDiscovery = 0 } }
     @Published var loginEnabled = SMAppService.mainApp.status == .enabled
+    @Published var autoOpenSettings = AutoOpenSettings() {
+        didSet { if !demo { autoOpenSettings.save(to: .standard) } }
+    }
+    private var autoOpenPolicy = AutoOpenPolicy()
+    var autoOpenRequested: ((AutoOpenTarget) -> Void)?
     let demo: Bool
     let core: RequestController
     private let adapter: DesktopAdapter
@@ -115,6 +128,7 @@ import ClaudeDesktopAdapter
         adapter = DesktopAdapter(directory: directory, controller: core)
         enabled = UserDefaults.standard.object(forKey: "desktopEnabled") as? Bool ?? true
         extraThreads = UserDefaults.standard.string(forKey: "extraThreads") ?? ""
+        if !demo { autoOpenSettings = AutoOpenSettings.load(from: .standard) }
     }
 
     func start() {
@@ -239,7 +253,7 @@ import ClaudeDesktopAdapter
     }
     func loadDemo(_ scenario: DemoScenario? = nil) async {
         guard demo else { return }
-        lifecycle = SessionLifecycle(); dismissal = nil
+        lifecycle = SessionLifecycle(); dismissal = nil; autoOpenPolicy = AutoOpenPolicy()
         let generation = UUID(); demoGeneration = generation
         if let scenario { demoScenario = scenario }
         let scenario = demoScenario

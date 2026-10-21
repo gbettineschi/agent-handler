@@ -46,6 +46,7 @@ import Combine
                 Task { @MainActor in self?.refreshStatus() }
             }.store(in: &observations)
             refreshStatus()
+            model.autoOpenRequested = { [weak self] target in self?.panel?.showAutomatically(for: target) }
             panel?.visibilityChanged = { [weak self] visible in self?.item?.button?.highlight(visible) }
             NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
             model.start()

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OSLog
 
 final class AttentionPanel: NSPanel {
     var dismiss: (() -> Void)?
@@ -17,6 +18,7 @@ final class AttentionPanel: NSPanel {
     private var contentHeight: CGFloat = 260
     private var resizeTask: Task<Void, Never>?
     private var placedFrame: CGRect?
+    private static let log = Logger(subsystem: "dev.gbettineschi.agent-handler", category: "Panel")
     var visibilityChanged: ((Bool) -> Void)?
     weak var anchor: NSStatusBarButton?
     init(model: AppModel) {
@@ -62,13 +64,27 @@ final class AttentionPanel: NSPanel {
         panel.resignKey(); panel.orderOut(nil)
         visibilityChanged?(false)
     }
-    func show() {
+    func showAutomatically(for target: AutoOpenTarget) {
+        // Do not navigate away from an answer or settings the user has open.
+        guard !presentation.expanded else { return }
+        switch target {
+        case .request(let key):
+            guard model.requests.contains(where: { $0.id == key && $0.state == .pending }) else { return }
+            model.selectedRequestID = key; model.showSessions = false
+        case .sessions: model.showSessions = true
+        }
+        model.showSettings = false
+        show(takingFocus: false)
+        Self.log.notice("Automatically opened panel; keyboard focus: \(self.panel.isKeyWindow)")
+    }
+    func show(takingFocus: Bool = true) {
         let wasVisible = panel.isVisible
         presentation.expanded = true
         place()
         panel.contentView?.window?.recalculateKeyViewLoop()
         panel.alphaValue = wasVisible || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
-        panel.makeKeyAndOrderFront(nil)
+        if takingFocus { panel.makeKeyAndOrderFront(nil) }
+        else { panel.orderFrontRegardless() }
         visibilityChanged?(true)
         guard !wasVisible else { return }
         NSAnimationContext.runAnimationGroup { context in

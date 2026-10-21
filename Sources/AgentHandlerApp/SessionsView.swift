@@ -60,8 +60,8 @@ private struct SessionRow: View {
                     if let remaining = session.remaining(at: now) {
                         Text("·").foregroundStyle(.tertiary)
                         Text(remaining).monospacedDigit().foregroundStyle(.secondary)
-                            .help("Included in the menu-bar count for another \(remaining).")
-                            .accessibilityLabel("Counted for \(remaining) more")
+                            .help("Automatically removed from this list in \(remaining).")
+                            .accessibilityLabel("Removed from the list in \(remaining)")
                     }
                 }.font(.system(size: 11))
                 if let preview = session.request?.request.title.trimmingCharacters(in: .whitespacesAndNewlines), !preview.isEmpty {
