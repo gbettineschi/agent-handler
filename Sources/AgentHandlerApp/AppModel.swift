@@ -26,13 +26,15 @@ import ClaudeDesktopAdapter
     @Published private(set) var dismissal: SessionDismissal?
     @Published private(set) var sessionClock = Date()
     private var lifecycle = SessionLifecycle()
+    private var ordering = SessionOrdering()
+    private var savedOrdering: SessionOrdering?
     private var presentationTimer: Task<Void, Never>?
     private var savedLifecycle: Data?
     private var observedSessions: [SessionSummary] {
         SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs)
     }
-    var hiddenSessions: [SessionSummary] { lifecycle.hidden(observedSessions, now: sessionClock) }
-    var sessions: [SessionSummary] { lifecycle.visible(observedSessions, now: sessionClock) }
+    var hiddenSessions: [SessionSummary] { ordering.sorted(lifecycle.hidden(observedSessions, now: sessionClock)) }
+    var sessions: [SessionSummary] { ordering.sorted(lifecycle.visible(observedSessions, now: sessionClock)) }
     var menuBarState: MenuBarState {
         MenuBarState(sessions: sessions, now: sessionClock, enabled: enabled,
                      warning: issue != nil || trackingWarning != nil || needsSourceApproval)
@@ -40,6 +42,7 @@ import ClaudeDesktopAdapter
     func updateSessionPresentation(now: Date = Date()) {
         let observed = observedSessions
         let newlyFinished = lifecycle.observe(observed, now: now)
+        ordering.observe(observed, requests: requests, newlyFinished: newlyFinished)
         if let dismissal, !dismissal.canUndo(in: observed, now: now) ||
             !lifecycle.hidden(observed, now: now).contains(where: { $0.id == dismissal.session.id && $0.turnID == dismissal.session.turnID }) {
             self.dismissal = nil
@@ -78,9 +81,15 @@ import ClaudeDesktopAdapter
     }
     private func persistLifecycle() {
         let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
-        guard !demo, let data = try? encoder.encode(lifecycle), data != savedLifecycle else { return }
-        UserDefaults.standard.set(data, forKey: "sessionPresentation.v1")
-        savedLifecycle = data
+        guard !demo else { return }
+        if let data = try? encoder.encode(lifecycle), data != savedLifecycle {
+            UserDefaults.standard.set(data, forKey: "sessionPresentation.v1")
+            savedLifecycle = data
+        }
+        if ordering != savedOrdering, let data = try? encoder.encode(ordering) {
+            UserDefaults.standard.set(data, forKey: "sessionOrdering.v1")
+            savedOrdering = ordering
+        }
     }
     var displayedRequest: RequestView? { requests.first { $0.id == selectedRequestID } ?? SessionSummary.preferredRequest(requests) }
     @Published var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: "desktopEnabled"); Task { await reconfigure() } } }
@@ -136,6 +145,10 @@ import ClaudeDesktopAdapter
            let restored = try? JSONDecoder().decode(SessionLifecycle.self, from: data) {
             lifecycle = restored; savedLifecycle = data
         }
+        if !demo, let data = UserDefaults.standard.data(forKey: "sessionOrdering.v1"),
+           let restored = try? JSONDecoder().decode(SessionOrdering.self, from: data) {
+            ordering = restored; savedOrdering = restored
+        }
         presentationTimer = Task { [weak self] in
             while !Task.isCancelled {
                 if let self {
@@ -148,6 +161,11 @@ import ClaudeDesktopAdapter
         watching = Task { [weak self, core] in
             for await views in await core.updates() {
                 guard let self, !Task.isCancelled else { return }
+                // Process authoritative approval withdrawal before the waiting group's keys clear.
+                ordering.approvalsClosed(views.compactMap {
+                    guard $0.state == .closed, case .approval = $0.request.content else { return nil }
+                    return $0.id
+                })
                 requests = views.filter(\.needsAttention)
                 updateSessionPresentation()
             }
@@ -245,6 +263,11 @@ import ClaudeDesktopAdapter
     }
 
     func respond(_ request: AttentionRequest, answer: UserAnswer) {
+        // Questions acquire their accepted native input marker; don't count that echo twice.
+        if case .approval = request.content {
+            ordering.humanIntervened(in: request.key.scope, requestKey: request.key)
+            updateSessionPresentation()
+        }
         Task {
             do { try await core.respond(key: request.key, fingerprint: request.fingerprint, answer: answer,
                                         using: demo ? DemoTransport() : adapter) }
@@ -253,7 +276,7 @@ import ClaudeDesktopAdapter
     }
     func loadDemo(_ scenario: DemoScenario? = nil) async {
         guard demo else { return }
-        lifecycle = SessionLifecycle(); dismissal = nil; autoOpenPolicy = AutoOpenPolicy()
+        lifecycle = SessionLifecycle(); ordering = SessionOrdering(); dismissal = nil; autoOpenPolicy = AutoOpenPolicy()
         let generation = UUID(); demoGeneration = generation
         if let scenario { demoScenario = scenario }
         let scenario = demoScenario

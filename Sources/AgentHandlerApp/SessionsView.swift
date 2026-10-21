@@ -3,7 +3,6 @@ import AgentHandlerCore
 
 struct SessionsView: View {
     let sessions: [SessionSummary]
-    var now = Date()
     var dismiss: (SessionSummary) -> Void = { _ in }
     let select: (RequestKey) -> Void
 
@@ -12,7 +11,6 @@ struct SessionsView: View {
             HStack {
                 Text("Sessions").font(.system(size: 12, weight: .semibold)).accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text("Newest first").font(.caption).foregroundStyle(.secondary)
             }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8).panelMeasuredHeight(.navigation)
             ScrollView {
                 VStack(spacing: 0) {
@@ -20,11 +18,11 @@ struct SessionsView: View {
                         VStack(spacing: 0) {
                             HStack(spacing: 0) {
                                 if let request = session.request {
-                                    Button { select(request.id) } label: { SessionRow(session: session, now: now) }
+                                    Button { select(request.id) } label: { SessionRow(session: session) }
                                         .buttonStyle(SessionOpenStyle()).handlerFocusRing().help("Show question or approval")
-                                } else { SessionRow(session: session, now: now) }
+                                } else { SessionRow(session: session) }
                                 if session.isFinished {
-                                    PanelIconButton(title: "Dismiss finished session: \(session.title)", symbol: "xmark", helpText: "Hide this finished turn. New activity brings it back.") { dismiss(session) }
+                                    PanelIconButton(title: "Dismiss finished session: \(session.title)", symbol: "xmark", helpText: "Hide this finished turn. New activity brings it back.", subtle: true) { dismiss(session) }
                                         .padding(.trailing, 10)
                                 }
                             }.accessibilityElement(children: .contain)
@@ -39,13 +37,11 @@ struct SessionsView: View {
 
 private struct SessionRow: View {
     let session: SessionSummary
-    let now: Date
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Group {
-                if session.status == .running, !reduceMotion {
-                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                if session.status == .running {
+                    RunningAgentIndicator()
                 } else { Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(tint) }
             }.frame(width: 18, height: 18).padding(.top, 1).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
@@ -57,12 +53,6 @@ private struct SessionRow: View {
                     Text("·").foregroundStyle(.tertiary)
                     Text(label).foregroundStyle(tint)
                         .help(session.activityDetail == nil ? label : "Latest native activity; updates while the agent runs.")
-                    if let remaining = session.remaining(at: now) {
-                        Text("·").foregroundStyle(.tertiary)
-                        Text(remaining).monospacedDigit().foregroundStyle(.secondary)
-                            .help("Automatically removed from this list in \(remaining).")
-                            .accessibilityLabel("Removed from the list in \(remaining)")
-                    }
                 }.font(.system(size: 11))
                 if let preview = session.request?.request.title.trimmingCharacters(in: .whitespacesAndNewlines), !preview.isEmpty {
                     Text(preview).font(.system(size: 12)).foregroundStyle(.secondary)
@@ -107,12 +97,26 @@ private struct SessionRow: View {
     private var tint: Color {
         if let request = session.request, ![.pending, .sending].contains(request.state) { return .orange }
         switch session.status {
-        case .running: return .cyan
+        case .running: return .blue
         case .needsInput: return .orange
         case .completed: return .green
         case .failed: return .red
         case .cancelled, .unknown: return .secondary
         }
+    }
+}
+
+/// The same original agent artwork as the menu bar, in blue with a gentle bob/blink.
+/// Four frames at a low cadence; Reduce Motion keeps a still agent instead.
+private struct RunningAgentIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private static let frames = (0..<4).map { AgentStatusIcon.image(mode: .working, frame: $0) }
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.3, paused: reduceMotion)) { context in
+            let frame = reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 0.3) % 4
+            Image(nsImage: Self.frames[frame]).renderingMode(.template).resizable().scaledToFit()
+                .foregroundStyle(.blue)
+        }.frame(width: 22, height: 18)
     }
 }
 

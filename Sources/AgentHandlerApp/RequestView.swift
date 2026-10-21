@@ -43,7 +43,7 @@ struct HandlerPanelView: View {
                                           answer: { model.respond(current.request, answer: $0) })
                             .id(current.request.fingerprint)
                     } else if !model.sessions.isEmpty {
-                        SessionsView(sessions: model.sessions, now: model.sessionClock, dismiss: model.dismissSession) { key in
+                        SessionsView(sessions: model.sessions, dismiss: model.dismissSession) { key in
                             model.selectedRequestID = key
                             model.showSessions = false
                         }

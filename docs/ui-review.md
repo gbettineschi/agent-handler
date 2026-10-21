@@ -14,7 +14,7 @@ The floating notch pill has been removed. A native NSStatusItem opens a bounded 
 | Paused | Pause badge |
 | Idle | Still agent glyph and zero |
 
-The number counts active sessions plus observed finishes younger than 300 seconds, once per session. Finished rows show their remaining countdown and disappear after 300 seconds; deadlines survive restart. Their × hides only that finished turn; subscriptions continue, and new/resumed activity or unresolved input becomes visible again. Dismissals and finish times survive app restart. Launch-history completions receive only a display expiry grace period, without being counted or announced as new finishes; the initial baseline includes explicit and pinned subscriptions as well as discovered chats. A newly discovered finished chat after that baseline can enter the count.
+The number counts active sessions plus observed finishes younger than 300 seconds, once per session. Finished rows disappear after 300 seconds without displaying a countdown; deadlines survive restart. Their × hides only that finished turn; subscriptions continue, and new/resumed activity or unresolved input becomes visible again. Dismissals and finish times survive app restart. Launch-history completions receive only a display expiry grace period, without being counted or announced as new finishes; the initial baseline includes explicit and pinned subscriptions as well as discovered chats. A newly discovered finished chat after that baseline can enter the count.
 
 Reduce Motion stops both glyph motion and the short opening fade. The window has one animation owner and never combines a window resize animation with a SwiftUI spring. Exact approval choices remain multiline buttons without a default keyboard action.
 
@@ -24,7 +24,7 @@ The [Open Vibe Island panel](https://github.com/Octane0411/open-vibe-island/blob
 
 ## Repeatable visual checks
 
-Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Fifteen panel cases assert logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
+Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Seventeen panel cases assert logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
 
 | State | Preview |
 | --- | --- |
@@ -35,7 +35,7 @@ Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real control
 | Uncertain delivery, no resend | [Image](images/ui/uncertain.png) |
 | Sessions without requests, dismiss controls | [Image](images/ui/sessions.png) |
 | Narrow and long titles | [Narrow](images/ui/sessions-narrow.png), [long titles](images/ui/sessions-long-titles.png) |
-| Countdown and Undo | [Countdown](images/ui/sessions-countdown.png), [Undo](images/ui/sessions-undo.png) |
+| Recent finish and Undo | [Recent finish](images/ui/sessions-recent.png), [Undo](images/ui/sessions-undo.png) |
 | Seventeen sessions and empty | [Many](images/ui/sessions-many.png), [empty](images/ui/empty.png) |
 | Settings | [Image](images/ui/settings.png) |
 | High-contrast window appearance | [Image](images/ui/appearance-high-contrast.png) |
@@ -82,3 +82,12 @@ The Open automatically settings group has independent blocking input (default on
 Automatic presentation preserves keyboard focus in the other app, and leaves the selected question/settings alone if the panel is already open. Manual opening still makes the panel key for keyboard use. No answer or approval is ever submitted by this policy.
 
 The [expired fixture](images/ui/finished-expired.png) verifies that only the still-running session remains after the deadline. Settings rendering includes all three switches within the adaptive height limit.
+
+
+## Stable ordering and quieter session rows — 21 October 2026
+
+Session ordering is presentation state, persisted separately from lifecycle and delivery. New intervention identities promote a waiting row above ordinary rows; the most recently observed intervention comes first. Running hints, metadata recency, polling, owner reconnects and partially hydrated request scopes cannot reshuffle it. Ordinary rows move on observed finishes, native user input identities and interventions. Native question responses use their accepted input marker; local approval decisions retain exact-key accounting until source withdrawal. Typed approval closures also cover source-app decisions. Withdrawal affects presentation recency and does not establish that a command executed.
+
+The native loading spinner has been replaced with the original agent glyph in blue, gently bobbing and blinking at a low cadence. Reduce Motion leaves a still blue agent. Finished rows have no countdown text; their internal expiry remains unchanged. The smaller muted dismiss control retains its 28-point hit target, keyboard focus outline and stronger hover state.
+
+Regression checks cover stable metadata refresh, newest intervention priority, multiple pending siblings, native input, finishes, unknown gaps, partial startup hydration, delayed answer echoes, mixed question/approval actions and persisted exact-key approval accounting. The offscreen production AppModel check verifies that reversed discovery metadata leaves the list unchanged and native human input promotes its row.

@@ -10,13 +10,9 @@ struct SessionSummary: Identifiable {
     var recentUntil: Date? = nil
     var expiresAt: Date? = nil
     var activityDetail: ActivityDetail? = nil
+    var humanInputID: String? = nil
     var sourceLabel: String { isClaude ? "Claude" : "Codex" }
     var isFinished: Bool { [.completed, .failed, .cancelled].contains(status) && request == nil }
-    func remaining(at now: Date) -> String? {
-        guard let deadline = expiresAt ?? recentUntil, deadline > now else { return nil }
-        let seconds = min(300, Int(ceil(deadline.timeIntervalSince(now))))
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
     var isClaude: Bool { id.installation.hasPrefix("claude-local-audit:") }
 
     static func rows(activities: [ActivityView], requests: [RequestView], titles: [String: String], recentIDs: [String]) -> [Self] {
@@ -36,7 +32,8 @@ struct SessionSummary: Identifiable {
             } else { status = activityByID[scope]?.status ?? .unknown }
             return Self(id: scope, title: titles[scope.conversation] ?? (scope.installation.hasPrefix("claude-local-audit:") ? "Claude · \(scope.conversation.suffix(8))" : "Desktop session"),
                         status: status, request: request, turnID: activityByID[scope]?.turnID ?? request?.id.turn,
-                        activityDetail: status == .running ? activityByID[scope]?.detail : nil)
+                        activityDetail: status == .running ? activityByID[scope]?.detail : nil,
+                        humanInputID: activityByID[scope]?.isCurrent == true ? activityByID[scope]?.humanInputID : nil)
         }.sorted {
             let lhs = order[$0.id.conversation] ?? Int.max, rhs = order[$1.id.conversation] ?? Int.max
             return lhs == rhs ? ($0.id.installation, $0.id.conversation) < ($1.id.installation, $1.id.conversation) : lhs < rhs

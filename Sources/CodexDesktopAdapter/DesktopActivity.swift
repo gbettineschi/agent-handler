@@ -4,6 +4,15 @@ import AgentHandlerCore
 /// Does not infer completion from item text, a missing request or a quiet connection.
 enum DesktopActivity {
     enum Failure: Error { case unsupported }
+    /// Opaque presentation marker only. Never inspect message bodies or derive response authority.
+    static func humanInputID(in turn: JSONValue) -> String? {
+        guard let turnID = turn["turnId"].stringValue, !turnID.isEmpty, turnID.utf8.count <= 256,
+              let item = turn["items"].arrayValue?.last(where: {
+                  $0["type"].stringValue == "userMessage" ||
+                  ($0["type"].stringValue == "steeringUserMessage" && $0["status"].stringValue == "accepted")
+              }), let id = item["id"].stringValue, !id.isEmpty, id.utf8.count <= 256 else { return nil }
+        return turnID + ":" + id
+    }
     /// The latest item is a display hint, not lifecycle evidence. In particular,
     /// do not scan backwards past a completed tool and revive older reasoning.
     static func detail(in turn: JSONValue) -> ActivityDetail? {
@@ -26,7 +35,7 @@ enum DesktopActivity {
     }
 
     static func parse(state: JSONValue, threadID: String, owner: String, installation: String) throws
-        -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail?) {
+        -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail?, humanInputID: String?) {
         if state["turnHistory"] != .null {
             guard state["turnHistory"]["kind"].stringValue == "canonical",
                   let islands = state["turnHistory"]["history"]["islands"].arrayValue,
@@ -58,6 +67,6 @@ enum DesktopActivity {
                 requests.allSatisfy({ $0.objectValue != nil && $0["method"].stringValue?.isEmpty == false && $0["completed"] == .bool(true) }) {
             attention = .clear
         } else { attention = .unknown }
-        return (turnID, phase, attention, detail(in: turn))
+        return (turnID, phase, attention, detail(in: turn), humanInputID(in: turn))
     }
 }

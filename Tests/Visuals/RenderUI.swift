@@ -96,7 +96,7 @@ import AgentHandlerCore
             ("sessions-thinking", .empty, 420, 400, true, false, false),
             ("finished-expired", .empty, 420, 400, true, false, false),
             ("sessions-long-titles", .empty, 420, 400, true, false, false),
-            ("sessions-countdown", .empty, 420, 400, true, false, false),
+            ("sessions-recent", .empty, 420, 400, true, false, false),
             ("sessions-undo", .empty, 420, 400, true, false, false),
             ("sessions-many", .empty, 420, 400, true, false, false),
             ("empty", .empty, 420, 260, true, false, false),
@@ -131,7 +131,7 @@ import AgentHandlerCore
                     model.titles[activity.id.conversation] = "A long conversation title — review the implementation, check the remaining details and prepare the next release"
                 }
             }
-            if name == "sessions-countdown" {
+            if name == "sessions-recent" {
                 let completed = model.activities
                 var running = ActivityStore()
                 for activity in completed {
@@ -190,6 +190,23 @@ import AgentHandlerCore
             print("\(name): \(bitmap.pixelsWide)×\(bitmap.pixelsHigh)")
         }
         try await verifyAdaptiveTransitions(model: model)
+        await model.loadDemo(.empty)
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        model.updateSessionPresentation()
+        let initialOrder = model.sessions.map(\.id)
+        model.recentConversationIDs.reverse(); model.activities.reverse()
+        model.updateSessionPresentation()
+        guard model.sessions.map(\.id) == initialOrder, let target = initialOrder.last else { throw Failure.dimensions }
+        var input = ActivityStore()
+        for activity in model.activities {
+            let epoch = input.begin(scope: activity.id)
+            input.observe(.init(scope: activity.id, epoch: epoch, revision: 1, turnID: activity.turnID,
+                phase: activity.id == target ? .running : activity.phase, attention: .clear,
+                humanInputID: activity.id == target ? "native-human-input" : nil))
+        }
+        model.activities = input.views; model.updateSessionPresentation()
+        guard model.sessions.first?.id == target else { throw Failure.dimensions }
+        print("session ordering: metadata refresh stays stable; native human input promotes its row")
         let gallery = NSHostingView(rootView: IconGallery())
         gallery.sizingOptions = []
         gallery.appearance = NSAppearance(named: .darkAqua)

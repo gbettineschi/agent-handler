@@ -4,7 +4,21 @@ import AgentHandlerCore
 @testable import CodexDesktopAdapter
 
 struct DesktopActivityTests {
-    func parse(_ state: JSONValue) throws -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail?) {
+    @Test func humanInputMarkerIgnoresToolOutputAndUnacceptedSteering() {
+        func turn(_ items: [JSONValue]) -> JSONValue { .object(["turnId": .string("turn"), "items": .array(items)]) }
+        func item(_ type: String, _ id: String, _ status: String? = nil) -> JSONValue {
+            .object(["type": .string(type), "id": .string(id), "status": status.map(JSONValue.string) ?? .null])
+        }
+        let user = item("userMessage", "user")
+        let output = item("functionCallOutput", "tool")
+        #expect(DesktopActivity.humanInputID(in: turn([user])) == "turn:user")
+        #expect(DesktopActivity.humanInputID(in: turn([user, output])) == "turn:user")
+        #expect(DesktopActivity.humanInputID(in: turn([output])) == nil)
+        #expect(DesktopActivity.humanInputID(in: turn([user, item("steeringUserMessage", "rejected", "rejected")])) == "turn:user")
+        #expect(DesktopActivity.humanInputID(in: turn([user, item("steeringUserMessage", "answer", "accepted")])) == "turn:answer")
+        #expect(DesktopActivity.humanInputID(in: turn([item("userMessage", "")])) == nil)
+    }
+    func parse(_ state: JSONValue) throws -> (turnID: String, phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail?, humanInputID: String?) {
         try DesktopActivity.parse(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
     }
 

@@ -28,10 +28,13 @@ public struct ActivitySnapshot: Sendable {
     public let phase: ActivityPhase
     public let attention: ActivityAttention
     public let detail: ActivityDetail?
+    /// Native input identity for presentation ordering only; no message body or delivery authority.
+    public let humanInputID: String?
     public init(scope: RequestScope, epoch: UUID, revision: Int64, turnID: String,
-                phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail? = nil) {
+                phase: ActivityPhase, attention: ActivityAttention, detail: ActivityDetail? = nil, humanInputID: String? = nil) {
         self.scope = scope; self.epoch = epoch; self.revision = revision
         self.turnID = turnID; self.phase = phase; self.attention = attention; self.detail = detail
+        self.humanInputID = humanInputID
     }
 }
 
@@ -41,6 +44,7 @@ public struct ActivityView: Identifiable, Equatable, Sendable {
     public let phase: ActivityPhase
     public let attention: ActivityAttention
     public internal(set) var detail: ActivityDetail?
+    public internal(set) var humanInputID: String?
     public internal(set) var isCurrent: Bool
     public var status: ActivityStatus {
         guard isCurrent else { return .unknown }
@@ -71,7 +75,7 @@ public struct ActivityStore: Sendable {
     }
     public mutating func begin(scope: RequestScope) -> UUID {
         var previous = sources[scope]?.view
-        previous?.isCurrent = false; previous?.detail = nil
+        previous?.isCurrent = false; previous?.detail = nil; previous?.humanInputID = nil
         let epoch = UUID()
         sources[scope] = Source(epoch: epoch, view: previous)
         return epoch
@@ -82,11 +86,12 @@ public struct ActivityStore: Sendable {
         source.revision = snapshot.revision
         guard !snapshot.scope.installation.isEmpty, !snapshot.scope.conversation.isEmpty,
               !snapshot.turnID.isEmpty, snapshot.turnID.utf8.count <= 256 else {
-            source.view?.isCurrent = false; source.view?.detail = nil; sources[snapshot.scope] = source
+            source.view?.isCurrent = false; source.view?.detail = nil; source.view?.humanInputID = nil; sources[snapshot.scope] = source
             return false
         }
         source.view = .init(id: snapshot.scope, turnID: snapshot.turnID, phase: snapshot.phase,
-                            attention: snapshot.attention, detail: snapshot.phase == .running && snapshot.attention == .clear ? snapshot.detail : nil, isCurrent: true)
+                            attention: snapshot.attention, detail: snapshot.phase == .running && snapshot.attention == .clear ? snapshot.detail : nil,
+                            humanInputID: snapshot.humanInputID.flatMap { !$0.isEmpty && $0.utf8.count <= 1024 ? $0 : nil }, isCurrent: true)
         sources[snapshot.scope] = source
         return true
     }
@@ -94,6 +99,7 @@ public struct ActivityStore: Sendable {
         guard sources[scope]?.epoch == epoch else { return }
         sources[scope]?.view?.isCurrent = false
         sources[scope]?.view?.detail = nil
+        sources[scope]?.view?.humanInputID = nil
     }
     public mutating func remove(scope: RequestScope) { sources.removeValue(forKey: scope) }
 }
