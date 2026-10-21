@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current local suite passes 155 test functions across 24 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
+This is a development milestone, not universal agent interception. The current local suite passes 166 test functions across 25 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
 
 | Surface | Implemented | Evidence through 2026-10-21 |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ This is a development milestone, not universal agent interception. The current l
 | Claude ordinary cloud Chat / cloud-only Cowork | No adapter | No verified companion event/response attachment. Consumer Chat does not run plugin hooks. Local audit support only applies when that runtime actually writes the compatible files. |
 | Claude answer / approval delivery | Not implemented | Reading a permission log is not a live callback. The source app still handles responses; the new observer never creates answerable requests. CLI was signed out and Desktop showed Free during inspection. |
 | Answering in the source app | Reply envelopes withdraw matching requests | Two user replies in the source conversation cleared their previously visible Agent Handler cards. The computer tool cannot itself click the source app; cleanup was checked in Agent Handler. |
-| Multiple questions and conversations | Independent request identity and scoped state | Two simultaneous native questions tested; answering one retained the other. Multiple conversations remain core/socket-fixture tested. |
+| Multiple questions and conversations | Independent request identity, scoped state and stable event ordering | Two real chats held simultaneous questions; newest intervention first, answering it retained the older request at the top. The older request and order survived app restart and its answer arrived too. Polling/hints and discovery metadata cannot reorder ordinary rows. |
 | Codex command approvals | Native shell Allow passed; deny/cancel pending | Exact command/directory/reason, native choices including a bounded saved command rule, current owner and whole-request/settings fingerprint. On 2026-10-20 the user enabled Ask for approval, approved the harmless print command in Agent Handler, and supplied a screenshot. Execution resumed and the new delivery entry closed. The following full-access turn cannot produce another shell gate. See live-approval-setup.md. |
 | Codex app approvals | Fresh native Allow and Deny passed | ColorSync Utility and Grapher requests both automatically opened the exact live card. Conversation-only Allow resumed the first source tool; Deny caused the second tool to report access refused. Both cards cleared and durable records closed. No Always allow grant was selected. |
 | Codex browser-origin approvals | Fresh native one-time Allow passed | The genuine IANA origin confirmation automatically opened the live panel. Allow once resumed the browser, the reserved-domains page title was read and the agent-owned tab closed. Native pending state and durable withdrawal were independently checked. Browser Deny remains fixture-tested, not separately live-verified. |
