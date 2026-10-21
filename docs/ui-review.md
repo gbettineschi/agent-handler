@@ -16,7 +16,7 @@ The floating notch pill has been removed. A native NSStatusItem opens a bounded 
 
 The number counts active sessions plus observed finishes younger than 300 seconds, once per session. Finished rows disappear after 300 seconds without displaying a countdown; deadlines survive restart. Their × hides only that finished turn; subscriptions continue, and new/resumed activity or unresolved input becomes visible again. Dismissals and finish times survive app restart. Launch-history completions receive only a display expiry grace period, without being counted or announced as new finishes; the initial baseline includes explicit and pinned subscriptions as well as discovered chats. A newly discovered finished chat after that baseline can enter the count.
 
-Reduce Motion stops both glyph motion and the short opening fade. The window has one animation owner and never combines a window resize animation with a SwiftUI spring. Exact approval choices remain multiline buttons without a default keyboard action.
+Reduce Motion stops both glyph motion and the short opening fade. The window has one animation owner and never combines a window resize animation with a SwiftUI spring. Approval choices have no default keyboard action; persistent choices expose their exact scope in a separate local review before confirmation.
 
 ## References inspected
 
@@ -24,12 +24,14 @@ The [Open Vibe Island panel](https://github.com/Octane0411/open-vibe-island/blob
 
 ## Repeatable visual checks
 
-Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Seventeen panel cases assert logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
+Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Twenty-two full-panel cases and two production request-view review cases check logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
 
 | State | Preview |
 | --- | --- |
 | Question | [Image](images/ui/question.png) |
-| Exact wrapping approval rule | [Image](images/ui/approval.png) |
+| Command approval | [Standard](images/ui/approval.png), [narrow](images/ui/approval-narrow.png), [long](images/ui/approval-long.png) |
+| Website approval | [Image](images/ui/approval-browser.png) |
+| Saved command-rule review, fixed controls | [Standard](images/ui/approval-rule-review.png), [long and narrow](images/ui/approval-rule-review-long.png) |
 | Long question | [Standard](images/ui/long-content.png), [narrow](images/ui/long-narrow.png) |
 | Unavailable | [Image](images/ui/unavailable.png) |
 | Uncertain delivery, no resend | [Image](images/ui/uncertain.png) |
@@ -40,7 +42,7 @@ Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real control
 | Settings | [Image](images/ui/settings.png) |
 | High-contrast window appearance | [Image](images/ui/appearance-high-contrast.png) |
 
-All examples are synthetic and marked DEMO. The live app launches without `--demo`. High-contrast NSAppearance does not establish system Increase Contrast acceptance.
+All examples are synthetic. Full-panel examples are marked DEMO; rule-review images show the production request body without the app header/footer. The live app launches without `--demo`. High-contrast NSAppearance does not establish system Increase Contrast acceptance.
 
 ## Live checks
 
@@ -50,23 +52,23 @@ Command-comma opens Settings. With macOS Keyboard Navigation temporarily enabled
 
 ## Detail polish
 
-Chat titles now take the full row width, with compact source/status/countdown underneath. Actionable rows have restrained hover/press feedback; focus has a single outline. The latest-first ordering stays intact. Settings text is shorter, empty state avoids implying that an unknown job succeeded, the Open command always opens, and an already visible panel does not repeat its fade.
+Chat titles take the full row width, with a compact source/status line underneath. Actionable rows have restrained hover/press feedback; focus has a single outline. Event-based ordering remains stable between interventions and finishes. Settings text is shorter, empty state avoids implying that an unknown job succeeded, the Open command always opens, and an already visible panel does not repeat its fade.
 
-Hide has a ten-second Undo available only on the sessions route, so Command-Z cannot capture answer-field editing. The restore menu recovers individual hidden finished rows after that offer expires. Both use exact source/turn identity and preserve the original countdown. A real hidden Job tracker row was restored through this menu while the other pre-existing hidden session was left hidden. Native list-row inspection alone does not establish that the × hit target was exercised successfully.
+Hide has a ten-second Undo available only on the sessions route, so Command-Z cannot capture answer-field editing. The restore menu recovers individual hidden finished rows after that offer expires. Both use exact source/turn identity and preserve the original finish deadline. A real hidden Job tracker row was restored through this menu while the other pre-existing hidden session was left hidden. Native list-row inspection alone does not establish that the × hit target was exercised successfully; the later content-height pass below exercised × and Undo.
 
-The expanded matrix adds narrow sessions, long titles, countdowns, Undo, sixteen sessions and a fully empty panel. Demo reset now clears its own dismissal state between examples. The full local suite passes 133 tests. VoiceOver is out of scope at the user's request.
+The matrix includes narrow sessions, long titles, finished-session expiry, Undo, sixteen sessions and a fully empty panel. Demo reset clears its own dismissal state between examples. Current test counts are in [verification](verification.md). VoiceOver is out of scope at the user's request.
 
 
 ## Content-driven height
 
-Fixed 260/400/480-point presets are replaced by measured natural content height. Scroll content is measured inside its viewport, separately from header/navigation/actions, banners and Undo. Route removal removes its measurements. The top edge remains anchored while a short AppKit transition changes height; Reduce Motion disables it. The 640-point/display cap keeps long content scrollable. Approval actions retain their own measured area up to 180 points. Session rows use a measured scroll stack, also exposing each finished-row × as an individual native button.
+Fixed 260/400/480-point presets are replaced by measured natural content height. Scroll content is measured inside its viewport, separately from header/navigation/actions, banners and Undo. Route removal removes its measurements. The top edge remains anchored while a short AppKit transition changes height; Reduce Motion disables it. The 640-point/display cap keeps long content scrollable. Approval actions retain their own measured area up to 260 points; saved-rule review details scroll separately from the fixed Back/confirmation footer. Session rows use a measured scroll stack, also exposing each finished-row × as an individual native button.
 
 All fifteen render fixtures now use measured sizing and check that measurement stays stable after resizing. A same-hosting-tree sequence covers three sessions → one → multiline banner → clear → settings → list → empty → restored, including a forced 100-point viewport. Live testing exercised Job tracker ×, Undo, and opening/closing Connection details. The row disappeared and returned, and the window resized in both directions. No source request or answer was sent.
 
 
 ## Provider and activity clarity
 
-Rows show Codex or Claude instead of Work. Running rows have a native progress indicator, with a static gear under Reduce Motion. The header uses the original agent glyph; the ambiguous history glyph is replaced with a labeled Hidden menu. Source tooltips describe the Desktop connection and Claude's read-only coverage.
+Rows show Codex or Claude instead of Work. Running rows use the animated blue agent glyph, held still under Reduce Motion. The header uses the original agent glyph; the ambiguous history glyph is replaced with a labeled Hidden menu. Source tooltips describe the Desktop connection and Claude's read-only coverage.
 
 Codex activity hints come only from the latest item in the newest validated running turn. A native reasoning marker may show Thinking; tools/messages need explicit inProgress status for their specific labels. Completed/unknown items fall back to Running rather than reviving older activity. Thinking is a latest-activity hint, not a claim of continuously measured model computation. No reasoning content or message body is read for these hints, and the bounded JSON projection is unchanged. The app reads the in-memory activity state once per second. Hints clear on disconnected/replaced owners, invalid snapshots, input, or completion.
 

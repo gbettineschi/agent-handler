@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current local suite passes 166 test functions across 25 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
+This is a development milestone, not universal agent interception. The current local suite passes 179 test functions across 29 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
 
 | Surface | Implemented | Evidence through 2026-10-21 |
 | --- | --- | --- |
@@ -12,17 +12,17 @@ This is a development milestone, not universal agent interception. The current l
 | Claude answer / approval delivery | Not implemented | Reading a permission log is not a live callback. The source app still handles responses; the new observer never creates answerable requests. CLI was signed out and Desktop showed Free during inspection. |
 | Answering in the source app | Reply envelopes withdraw matching requests | Two user replies in the source conversation cleared their previously visible Agent Handler cards. The computer tool cannot itself click the source app; cleanup was checked in Agent Handler. |
 | Multiple questions and conversations | Independent request identity, scoped state and stable event ordering | Two real chats held simultaneous questions; newest intervention first, answering it retained the older request at the top. The older request and order survived app restart and its answer arrived too. Polling/hints and discovery metadata cannot reorder ordinary rows. |
-| Codex command approvals | Native shell Allow passed; deny/cancel pending | Exact command/directory/reason, native choices including a bounded saved command rule, current owner and whole-request/settings fingerprint. On 2026-10-20 the user enabled Ask for approval, approved the harmless print command in Agent Handler, and supplied a screenshot. Execution resumed and the new delivery entry closed. The following full-access turn cannot produce another shell gate. See live-approval-setup.md. |
+| Codex command approvals | Native shell Allow once and Cancel passed | Fresh human-reviewed on-request turns produced real cards. Allow once printed the exact marker with exit 0. Cancel interrupted before command execution. Both requests cleared and their durable entries closed. Exact command-rule payload mapping and the redesigned review have synthetic coverage; an actual saved rule was not granted. See [verification](verification.md) and [setup](live-approval-setup.md). |
 | Codex app approvals | Fresh native Allow and Deny passed | ColorSync Utility and Grapher requests both automatically opened the exact live card. Conversation-only Allow resumed the first source tool; Deny caused the second tool to report access refused. Both cards cleared and durable records closed. No Always allow grant was selected. |
-| Codex browser-origin approvals | Fresh native one-time Allow passed | The genuine IANA origin confirmation automatically opened the live panel. Allow once resumed the browser, the reserved-domains page title was read and the agent-owned tab closed. Native pending state and durable withdrawal were independently checked. Browser Deny remains fixture-tested, not separately live-verified. |
+| Codex browser-origin approvals | Fresh native one-time Allow and Deny passed | IANA Allow once resumed the browser; the page title was read and the created tab closed. RFC Editor Deny produced the source tool's explicit user-declined error, and the denied origin was not retried. Both automatically opened the live panel, then cleared and closed durably. Always allow was not granted. |
 | File diffs, network/additional permission grants, arbitrary forms and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
-| Menu-bar interface | Native status icon, session count and adaptive AppKit/SwiftUI panel | Live source titles/activity, keyboard question submission, ×/Undo, settings growth/shrink and Ice reveal/click passed. Permission actions have no default Return shortcut. Seventeen adaptive layout fixtures pass. Multiple displays and physical focus dismissal remain separate gates; VoiceOver was explicitly removed from scope. |
+| Menu-bar interface | Native status icon, session count and adaptive AppKit/SwiftUI panel | Live source titles/activity, keyboard question submission, ×/Undo, settings growth/shrink and Ice reveal/click passed. Permission actions have no default Return shortcut. Twenty-four production-view fixtures pass, including narrow/long approvals and fixed saved-rule review controls. The redesigned live review/Back interaction and multiple displays remain separate checks; VoiceOver was explicitly removed from scope. |
 | Restart and uncertain delivery | Durable ledger and generation fencing | Fresh native pending-question recovery and an answer through the restarted app passed again. Controlled EOF/reconnect, stop-before-write, SQLite reopen and crash checks pass. Definite non-delivery can recover only with fresh state; uncertain sends stay blocked. Source-host restart, native uncertain-send restart and real sleep/wake remain pending. |
 
 ## Tested host
 
-- macOS arm64; Swift 6.3.3 Command Line Tools.
+- macOS arm64; local Swift 6.4 with SDK 26.5 selected through task-local wrappers. CI uses its configured macOS-15 toolchain.
 - `/Applications/ChatGPT.app`, bundle ID `com.openai.codex`, version **26.1013.40934**, build **20770**.
 - Private Desktop owner stream version **11**.
 - Read-only metadata: `state_5.sqlite`, required columns `id`, `title`, `archived`, `updated_at`.
