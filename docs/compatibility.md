@@ -26,7 +26,7 @@ This is a development milestone, not universal agent interception. The current l
 - `/Applications/ChatGPT.app`, bundle ID `com.openai.codex`. Earlier approvals were verified on **26.1013.40934 / 20770**. The final compatibility pass used **26.1016.51333 / 21161**: native question detection, recovery across Agent Handler restart and answer delivery passed again. Fresh approvals on this newer host are a separate check.
 - Private Desktop owner stream version **11**.
 - Read-only metadata: `state_5.sqlite`, required columns `id`, `title`, `archived`, `updated_at`.
-- Native probe: 16 discovery candidates; a compatible owner was found. A separate probe of the current conversation found **one compatible stream and one pending question**. No native answer was sent by a probe.
+- Earlier native probes found a compatible owner among 16 candidates and one pending question in this conversation. After the newer-host question test, a freshly rebuilt read-only diagnostic found **one compatible stream, running activity and zero pending requests**. No native answer was sent by a probe.
 
 The probe stops on the first compatible owner or after twelve seconds; its count is a sample, not evidence that every candidate is owned or supported. Metadata supplies candidates only. In this host build `has_user_event` is zero on ordinary conversations, so it is deliberately not a visibility filter.
 
