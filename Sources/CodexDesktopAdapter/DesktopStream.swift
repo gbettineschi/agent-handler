@@ -49,6 +49,8 @@ public final class DesktopStream: @unchecked Sendable {
     /// Until when each thread asked for once stays followed, on the system's uptime.
     private var asked: [String: TimeInterval] = [:]
     private var published: [String: Thread] = [:]
+    private var connectionStatus: DesktopDiagnostics.Connection = .stopped
+    private var observationIssues: [String: DesktopDiagnostics.Issue] = [:]
     private var running = false
     private var generation = 0
     // Survives gaps/reconnects for the same owner. A new owner establishes a new revision domain.
@@ -68,10 +70,12 @@ public final class DesktopStream: @unchecked Sendable {
             guard interests[interest, default: []] != threadIDs else { return nil }
             interests[interest] = threadIDs.isEmpty ? nil : threadIDs
             wanted = interests.values.reduce(into: []) { $0.formUnion($1) }
+            observationIssues = observationIssues.filter { wanted.contains($0.key) }
             revisionFloors = revisionFloors.filter { wanted.contains($0.key) }
             lock.broadcast()
             guard !wanted.isEmpty, !running else { return nil }
             running = true
+            connectionStatus = .connecting
             generation += 1
             return generation
         }
@@ -111,6 +115,10 @@ public final class DesktopStream: @unchecked Sendable {
 
     public func thread(_ threadID: String) -> Thread? { lock.withLock { published[threadID] } }
 
+    var diagnosticState: (connection: DesktopDiagnostics.Connection, issues: [String: DesktopDiagnostics.Issue]) {
+        lock.withLock { (wanted.isEmpty ? .stopped : connectionStatus, observationIssues) }
+    }
+
     /// One element whenever `threads` changed, and one to begin with for what is known already. Changes that come
     /// close together arrive as one.
     public var changes: AsyncStream<Void> {
@@ -131,6 +139,8 @@ public final class DesktopStream: @unchecked Sendable {
             interests = [:]
             wanted = []
             asked = [:]
+            connectionStatus = .stopped
+            observationIssues = [:]
             running = false
             generation += 1
             lock.broadcast()
@@ -150,6 +160,20 @@ public final class DesktopStream: @unchecked Sendable {
     }
 
     private func active(_ run: Int) -> Bool { lock.withLock { running && generation == run } }
+
+    private func connection(_ status: DesktopDiagnostics.Connection, run: Int) {
+        lock.withLock {
+            guard running, generation == run, !wanted.isEmpty else { return }
+            connectionStatus = status
+            observationIssues = [:]
+        }
+    }
+    private func issue(_ value: DesktopDiagnostics.Issue?, thread: String, run: Int) {
+        lock.withLock {
+            guard running, generation == run, wanted.contains(thread) else { return }
+            observationIssues[thread] = value
+        }
+    }
 
     private func acceptRevision(_ revision: Int64, thread: String, owner: String, run: Int) -> Bool {
         lock.withLock {
@@ -175,7 +199,17 @@ public final class DesktopStream: @unchecked Sendable {
                 let connection = try DesktopIPC(path: socketPath, timeout: 10)
                 defer { connection.close() }
                 try serve(connection, run: run)
-            } catch {}
+                self.connection(.connecting, run: run)
+            } catch {
+                let status: DesktopDiagnostics.Connection
+                switch error {
+                case DesktopIPC.Failure.timedOut: status = .timedOut
+                case DesktopIPC.Failure.unavailable: status = .unavailable
+                case DesktopIPC.Failure.rejected: status = .refused
+                default: status = .unreadableData
+                }
+                connection(status, run: run)
+            }
             publish([:], run: run)
             // A connection that held starts the next attempt soon; one refused again and again waits longer.
             wait = ProcessInfo.processInfo.systemUptime - began > 30 ? 1 : min(wait * 2, 30)
@@ -190,6 +224,7 @@ public final class DesktopStream: @unchecked Sendable {
         guard let clientID = (initialized["result"] as? [String: Any])?["clientId"] as? String, !clientID.isEmpty else {
             throw DesktopIPC.Failure.protocolError
         }
+        self.connection(.connected, run: run)
         var followed: [String: Followed] = [:]
         // Owner searches in flight by request, and when each thread's owner is looked for next.
         var searches: [String: (thread: String, sent: TimeInterval)] = [:]
@@ -219,6 +254,7 @@ public final class DesktopStream: @unchecked Sendable {
             foreign.formIntersection(wanted)
             let searching = Set(searches.values.map(\.thread))
             for thread in wanted where !foreign.contains(thread) && !searching.contains(thread) && (searchAfter[thread] ?? 0) <= now {
+                if followed[thread] == nil { issue(.awaitingOwner, thread: thread, run: run) }
                 let request = UUID().uuidString.lowercased()
                 connection.renew(timeout: 10)
                 try connection.post(["type": "request", "requestId": request, "sourceClientId": clientID, "version": 1,
@@ -245,13 +281,17 @@ public final class DesktopStream: @unchecked Sendable {
                           !owner.isEmpty, wanted.contains(search.thread) else {
                         // Only the hub's own word that nobody owns the thread ends a following; a search that failed
                         // some other way says nothing about the owner.
-                        if message["error"].stringValue == "no-client-found" { unfollow(search.thread) }
+                        if message["error"].stringValue == "no-client-found" {
+                            unfollow(search.thread)
+                            issue(.ownerUnavailable, thread: search.thread, run: run)
+                        }
                         searchAfter[search.thread] = now + retry
                         break
                     }
                     searchAfter[search.thread] = now + Self.confirm
                     guard followed[search.thread]?.owner != owner else { break }
                     unfollow(search.thread)
+                    issue(.awaitingSnapshot, thread: search.thread, run: run)
                     try connection.follow(true, source: clientID, owner: owner, threadID: search.thread)
                     followed[search.thread] = Followed(owner: owner, asked: now)
                 case "broadcast":
@@ -263,31 +303,37 @@ public final class DesktopStream: @unchecked Sendable {
                         guard message["version"] == .integer(11) else {
                             unfollow(thread)
                             foreign.insert(thread)
+                            issue(.unsupportedVersion, thread: thread, run: run)
                             break
                         }
                         let change = params["change"]
                         switch change["type"].stringValue {
                         case "snapshot":
                             guard case .integer(let revision) = change["revision"], revision >= 0 else {
+                                issue(.invalidSnapshot, thread: thread, run: run)
                                 entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
                             }
                             guard acceptRevision(revision, thread: thread, owner: entry.owner, run: run) else { break }
                             guard change["conversationState"].objectValue != nil else {
+                                issue(.invalidSnapshot, thread: thread, run: run)
                                 entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
                             }
                             if entry.state != nil && revision == entry.revision { break }
                             var state = change["conversationState"]
                             DesktopProjection.compact(&state)
                             guard let cost = retainedCost(state, replacing: thread) else {
-                                unfollow(thread); foreign.insert(thread); break
+                                unfollow(thread); foreign.insert(thread)
+                                issue(.capacityExceeded, thread: thread, run: run); break
                             }
                             entry.state = state
                             entry.retainedCost = cost
                             entry.revision = revision
                             followed[thread] = entry
+                            issue(nil, thread: thread, run: run)
                             dirty = true
                         case "patches":
                             guard case .integer(let observedRevision) = change["revision"], observedRevision >= 0 else {
+                                issue(.invalidSnapshot, thread: thread, run: run)
                                 entry.state = nil; entry.retainedCost = 0; followed[thread] = entry; dirty = true; break
                             }
                             // Even when the base is missing, recovery must include this observed revision.
@@ -308,6 +354,7 @@ public final class DesktopStream: @unchecked Sendable {
                                 entry.revision = revision
                                 dirty = true
                             } else {
+                                issue(.resynchronizing, thread: thread, run: run)
                                 // The kept state fell behind its owner's: unknown until the owner sends it whole again,
                                 // which it is asked to at once unless it was asked a moment ago.
                                 if now - entry.asked >= retry {
@@ -318,19 +365,23 @@ public final class DesktopStream: @unchecked Sendable {
                             }
                             if let current = entry.state {
                                 guard let cost = retainedCost(current, replacing: thread) else {
-                                    unfollow(thread); foreign.insert(thread); dirty = true; break
+                                    unfollow(thread); foreign.insert(thread); dirty = true
+                                    issue(.capacityExceeded, thread: thread, run: run); break
                                 }
                                 entry.retainedCost = cost
+                                issue(nil, thread: thread, run: run)
                             } else { entry.retainedCost = 0 }
                             followed[thread] = entry
                         default:
                             unfollow(thread); foreign.insert(thread); dirty = true
+                            issue(.invalidSnapshot, thread: thread, run: run)
                         }
                     case "client-status-changed":
                         // An owner that left takes its threads with it; they are looked for again.
                         guard params["status"].stringValue != "connected", let client = params["clientId"].stringValue else { break }
                         for (thread, entry) in followed where entry.owner == client {
                             followed.removeValue(forKey: thread)
+                            issue(.ownerUnavailable, thread: thread, run: run)
                             searchAfter[thread] = now + 5
                             dirty = true
                         }

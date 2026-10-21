@@ -57,6 +57,10 @@ import AppKit
         let activityCounts = Dictionary(grouping: activities, by: { $0.status.rawValue }).mapValues(\.count)
         let output: [String: Any] = ["mode": "read-only", "candidateCount": ids.count,
             "compatibleOwnerStreams": health.known, "pendingQuestions": questions, "pendingApprovals": pending.count - questions,
+            "connection": health.diagnostics.connection.rawValue,
+            "observationIssueCounts": Dictionary(uniqueKeysWithValues: health.diagnostics.issues.map { ($0.key.rawValue, $0.value) }),
+            "observedOwnerStreams": health.observedConversations.count,
+            "sourceOnlyApprovalConversations": health.sourceApprovalConversations.count,
             "workActivityCounts": activityCounts,
             "streamVersion": health.known > 0 ? 11 : 0, "status": health.message]
         print(String(decoding: try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self))

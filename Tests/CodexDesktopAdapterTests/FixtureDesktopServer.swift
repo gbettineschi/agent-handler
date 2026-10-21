@@ -27,6 +27,7 @@ final class FixtureDesktopServer: @unchecked Sendable {
     private let dropAnswer: Bool
     private let streamVersion: Int64
     private let fragmentSize: Int
+    private let initializeError: String?
     private var received: [JSONValue] = []
     /// Setting the state sends it whole to whoever follows, as a new revision.
     var state: JSONValue {
@@ -90,12 +91,13 @@ final class FixtureDesktopServer: @unchecked Sendable {
         }
     }
 
-    init(state: JSONValue, acknowledges: Bool = true, dropAnswer: Bool = false, streamVersion: Int64 = 11, fragmentSize: Int = 3) throws {
+    init(state: JSONValue, acknowledges: Bool = true, dropAnswer: Bool = false, streamVersion: Int64 = 11, fragmentSize: Int = 3, initializeError: String? = nil) throws {
         fixtureState = state
         self.acknowledges = acknowledges
         self.dropAnswer = dropAnswer
         self.streamVersion = streamVersion
         self.fragmentSize = max(1, fragmentSize)
+        self.initializeError = initializeError
         let folder = directory.appendingPathComponent("ipc")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let path = folder.appendingPathComponent("ipc.sock").path
@@ -203,6 +205,11 @@ final class FixtureDesktopServer: @unchecked Sendable {
         var reply: [String: JSONValue] = ["type": .string("response"), "requestId": message["requestId"], "resultType": .string("success")]
         switch method {
         case "initialize":
+            if let initializeError {
+                reply["resultType"] = .string("error")
+                reply["error"] = .string(initializeError)
+                break
+            }
             try send(peer, .object(["type": .string("broadcast"), "method": .string("unrelated-event")]))
             reply["result"] = .object(["clientId": .string("fixture-client")])
         case "thread-owner-discovery":

@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current local suite passes 204 test functions across 30 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
+This is a development milestone, not universal agent interception. The current local suite passes 213 test functions across 31 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md). The [remaining acceptance checks](verification.md#acceptance-still-required) distinguish missing native evidence from implemented fixture-tested behavior.
 
 | Surface | Implemented | Evidence through 2026-10-21 |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ Only stream version 11 and recognized complete question shapes become actionable
 - Activity records describe the latest native Work turn, not completion of an entire agent tree or an external follow-up queue. Visible pending submissions, active goals and queued messages prevent a completed classification. An optional panel opening follows newly observed terminal transitions; this is not durable notification delivery. Ordinary Chat/cloud-only Claude activity sources remain future work.
 - Claude audit observation is local and read-only: at most 512 discovered sources, 16 followed sources, 256 KiB read per source/tick and 512 KiB per record/metadata file. Existing files start at EOF. Unknown records, partial lines, backlog, source loss, rewriting/truncation and unreadable inputs disable current classification. Audit order and SDK session ID correlate facts; no native atomic turn/response targeting or audit-HMAC verification is claimed. A quiet log cannot prove the individual runtime is alive; the surviving Desktop process is only an availability check.
 
-Limit or compatibility failures preserve existing unresolved cards as unavailable. Some previously unseen requests may remain undiscovered; use the source app. The health display currently groups connection, schema and capacity faults into a broad fallback message.
+Limit or compatibility failures preserve existing unresolved cards as unavailable. Some previously unseen requests may remain undiscovered; use the source app. Settings → Connection details and the read-only probe distinguish missing connections, timeouts, refused handshakes, absent owners, unsupported stream versions, retained-state capacity, state resynchronization and independent question/approval/activity parsing failures. These are presentation-only fixed reason codes and counts; they do not establish response authority or print native content. Frame/JSON decoding failures and decoder budgets still share an unreadable-or-oversized-data reason; the report does not guess their exact cause. Counts can overlap and the probe remains a sample.
 
 After host updates: run tests, run the read-only probe, then complete the manual acceptance checklist before treating responses as verified on that build. Do not patch around a changed protocol by guessing IDs or accepting an unrecognized receipt.
 
