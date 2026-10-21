@@ -6,7 +6,7 @@ public enum DesktopQuestions {
     public enum Failure: Error { case unsupported }
     // Discriminators observed on the pinned Desktop build. New kinds require a compatibility check.
     private static let knownItems: Set<String> = ["agentMessage", "automaticApprovalReview", "collabAgentToolCall",
-        "commandExecution", "contextCompaction", "fileChange", "forkedFromConversation", "imageView", "mcpServerElicitation",
+        "commandExecution", "contextCompaction", "fileChange", "forkedFromConversation", "functionCallOutput", "imageView", "mcpServerElicitation",
         "mcpToolCall", "modelChanged", "reasoning", "sleep", "steered", "steeringUserMessage", "subAgentActivity",
         "userMessage", "webSearch"]
     public static func decode(_ data: Data, threadID: String, owner: String, installation: String) throws -> [AttentionRequest] {
@@ -43,11 +43,18 @@ public enum DesktopQuestions {
                     }
                 }) else { throw Failure.unsupported }
             }
-            // Only a native answer-only follow-up keeps an earlier question group current.
+            // Native answer-only follow-ups and tool continuations keep an earlier group current.
             // An unrelated prompt ends that group; never resurrect arbitrary historical questions.
             if userItems.isEmpty {
-                guard index == 0, hasOldest else { throw Failure.unsupported }
-                break
+                if index == 0 {
+                    guard hasOldest else { throw Failure.unsupported }
+                    break
+                }
+                // Desktop can resume a turn through its chat-management tool. The tool result
+                // has no user-answer authority and cannot end an earlier question group. Follow
+                // the complete history back to a native user boundary instead of losing liveness.
+                guard items.contains(where: { $0["type"].stringValue == "functionCallOutput" }) else { throw Failure.unsupported }
+                continue
             }
             guard userItems.allSatisfy({ !answeredQuestionIDs($0).isEmpty }) else { break }
             if index == 0, !hasOldest { throw Failure.unsupported }
