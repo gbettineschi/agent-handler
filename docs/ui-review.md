@@ -24,7 +24,7 @@ The [Open Vibe Island panel](https://github.com/Octane0411/open-vibe-island/blob
 
 ## Repeatable visual checks
 
-Run `bash scripts/render-ui.sh`. It creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Twenty-two full-panel cases and two production request-view review cases check logical dimensions; images are inspected manually. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
+Run `bash scripts/render-ui.sh`. Its render matrix creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Twenty-two full-panel cases and two production request-view review cases check logical dimensions; images are inspected manually. A separate native lifetime fixture briefly opens its own production panel and asserts actual visibility after controller updates, plus manual/Settings ownership. It does not interact with the installed app or any personal request. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
 
 | State | Preview |
 | --- | --- |
@@ -82,6 +82,8 @@ Finished rows have a durable five-minute display deadline, including historical 
 The Open automatically settings group has independent blocking input (default on), finish (off), and non-blocking question (off) switches. Current Codex native questions are asynchronous and use the non-blocking switch. Supported pending approvals and Claude's explicit read-only permission-wait signal use blocking. Unknown state never substitutes for a confirmed blocking request. Pending request keys are consumed once, including while options are off; reconnects and re-enabling a preference do not replay them. Terminal notifications come from transitions observed this run; initial terminal snapshots do not open the panel. Completed, failed and cancelled turns all qualify as endings.
 
 Automatic presentation preserves keyboard focus in the other app, and leaves the selected question/settings alone if the panel is already open. Manual opening still makes the panel key for keyboard use. No answer or approval is ever submitted by this policy.
+
+Automatic presentation also owns closing: resolved requests close its panel once no unresolved input remains. Uncertain, sending and unavailable requests keep it open. Claude audit waits require a positive recovery, not missing data. Finish-triggered openings retain the exact newly finished turns; only those notices and later automatic finish events extend the lifetime. Dismissal, expiry or resumed work clears each finish reason. Manual opening or Settings cancels automatic closing. Open menus defer closure while the policy continues observing new waits.
 
 The [expired fixture](images/ui/finished-expired.png) verifies that only the still-running session remains after the deadline. Settings rendering includes all three switches within the adaptive height limit.
 

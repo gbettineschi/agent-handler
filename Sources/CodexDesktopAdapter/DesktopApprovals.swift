@@ -33,8 +33,9 @@ enum DesktopApprovals {
             let turnID = params["turnId"].stringValue
             let turn = try turnID.flatMap { try DesktopQuestions.turn($0, in: state) }
             let settings = try effectiveSettings(turn?["params"].objectValue == nil ? state["currentPermissions"] : turn!["params"])
-            // Never show the automatic review queue as a human permission prompt.
-            guard settings["approvalsReviewer"].stringValue == "user" else { throw Failure.unsupported }
+            // This is the owner's manual server-request queue. Auto-review
+            // progress uses separate notifications; a human fallback can still
+            // appear here while its parent turn has an automatic reviewer.
             if let granular = settings["approvalPolicy"]["granular"].objectValue {
                 // The wire request does not identify whether a command prompt came from
                 // the sandbox or an execpolicy rule. Require both categories in that case.
@@ -51,6 +52,7 @@ enum DesktopApprovals {
                       params["itemId"].stringValue?.isEmpty == false,
                       let command = params["command"].stringValue, !command.isEmpty,
                       let cwd = params["cwd"].stringValue, !cwd.isEmpty,
+                      params["kind"] == .null || params["kind"].stringValue == "command",
                       params["networkApprovalContext"] == .null, params["additionalPermissions"] == .null else { throw Failure.unsupported }
                 let labels = ["accept": "Allow once", "acceptForSession": "Allow for this session", "decline": "Deny", "cancel": "Cancel turn"]
                 let decisions: [JSONValue]
@@ -145,7 +147,7 @@ enum DesktopApprovals {
     private static func effectiveSettings(_ raw: JSONValue) throws -> JSONValue {
         let settings = JSONValue.object(Dictionary(uniqueKeysWithValues:
             ["approvalsReviewer", "approvalPolicy", "sandboxPolicy"].map { ($0, raw[$0]) }))
-        guard complete(settings), settings["approvalsReviewer"].stringValue == "user",
+        guard complete(settings), ["user", "auto_review", "guardian_subagent"].contains(settings["approvalsReviewer"].stringValue ?? ""),
               let sandbox = settings["sandboxPolicy"].objectValue,
               let kind = sandbox["type"]?.stringValue else { throw Failure.unsupported }
         if let policy = settings["approvalPolicy"].stringValue {

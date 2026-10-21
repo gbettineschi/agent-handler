@@ -37,10 +37,12 @@ struct AutoOpenPolicyTests {
         let ended = SessionSummary(id: scope, title: "Finished", status: .completed, request: nil, turnID: "t")
         var policy = AutoOpenPolicy()
         let settings = AutoOpenSettings(blocking: true, finished: true, nonBlocking: false)
+        let unrelated = SessionSummary(id: .init(installation: scope.installation, conversation: "old"),
+            title: "Earlier finish", status: .completed, request: nil, turnID: "old")
         let start = policy.update(requests: [], sessions: [ended], newlyFinished: [], settings: settings)
         #expect(start == nil)
-        let newFinish = policy.update(requests: [], sessions: [ended], newlyFinished: [ended], settings: settings)
-        #expect(newFinish == .sessions)
+        let newFinish = policy.update(requests: [], sessions: [unrelated, ended], newlyFinished: [ended], settings: settings)
+        #expect(newFinish == .finished([.init(scope: scope, turn: "t")]))
         let paused = policy.update(requests: [request(true)], sessions: [], newlyFinished: [], settings: settings, enabled: false)
         #expect(paused == nil)
     }

@@ -3,7 +3,7 @@ import SwiftUI
 import AgentHandlerCore
 @testable import AgentHandlerApp
 
-/// Production views in unshown fixture windows. No input injection,
+/// Production views in fixture windows, plus a native panel lifetime check. No input injection,
 /// agent connection, source-app interaction or settings changes.
 @main struct RenderUI {
     @MainActor static func main() async {
@@ -78,6 +78,46 @@ import AgentHandlerCore
         }
         print("Height did not converge in six layouts: \(history)")
         throw Failure.dimensions
+    }
+    /// A native panel owned by this fixture process, with the real controller
+    /// and synthetic transport. No source app or personal request is touched.
+    @MainActor private static func verifyAutomaticClosing(model: AppModel) async throws {
+        await model.loadDemo(.approval)
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        guard let request = model.requests.first?.request else { throw Failure.render }
+        let panel = MenuBarPanel(model: model)
+        var visibility: [Bool] = []
+        panel.visibilityChanged = { visibility.append($0) }
+        model.attentionChanged = { panel.refresh() }
+        defer { model.attentionChanged = nil }
+        panel.showAutomatically(for: .request(request.key))
+        guard let window = NSApplication.shared.windows.first(where: { $0.title == "Agent Handler" }),
+              window.isVisible else { throw Failure.dimensions }
+        defer { window.performClose(nil) }
+        try await model.core.respond(key: request.key, fingerprint: request.fingerprint, answer: .decision("accept"), using: DemoTransport(outcome: .uncertain))
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        model.updateSessionPresentation()
+        guard window.isVisible, model.requests.first?.state == .uncertain else { throw Failure.dimensions }
+        let epoch = await model.core.begin(scope: request.key.scope)
+        await model.core.observe(.init(scope: request.key.scope, epoch: epoch, revision: 1, requests: []))
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        model.updateSessionPresentation()
+        guard !window.isVisible, visibility == [true, false] else { throw Failure.dimensions }
+        panel.show()
+        model.updateSessionPresentation()
+        guard window.isVisible else { throw Failure.dimensions }
+        window.performClose(nil)
+        await model.loadDemo(.approval)
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        guard let next = model.requests.first?.request else { throw Failure.render }
+        panel.showAutomatically(for: .request(next.key))
+        model.showSettings = true; panel.refresh()
+        let nextEpoch = await model.core.begin(scope: next.key.scope)
+        await model.core.observe(.init(scope: next.key.scope, epoch: nextEpoch, revision: 1, requests: []))
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        model.updateSessionPresentation()
+        guard window.isVisible else { throw Failure.dimensions }
+        print("automatic panel lifetime: uncertain stays visible; authoritative withdrawal hides; manual and Settings stay visible")
     }
     @MainActor private static func render() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -265,6 +305,7 @@ import AgentHandlerCore
         model.activities = input.views; model.updateSessionPresentation()
         guard model.sessions.first?.id == target else { throw Failure.dimensions }
         print("session ordering: metadata refresh stays stable; native human input promotes its row")
+        try await verifyAutomaticClosing(model: model)
         let gallery = NSHostingView(rootView: IconGallery())
         gallery.sizingOptions = []
         gallery.appearance = NSAppearance(named: .darkAqua)

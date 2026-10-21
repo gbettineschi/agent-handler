@@ -15,6 +15,7 @@ final class AttentionPanel: NSPanel {
     private let presentation = PanelPresentation()
     private var eventMonitors: [Any] = []
     private var menuTracking = false
+    private var autoClose = AutoClosePolicy()
     private var contentHeight: CGFloat = 260
     private var resizeTask: Task<Void, Never>?
     private var placedFrame: CGRect?
@@ -58,26 +59,33 @@ final class AttentionPanel: NSPanel {
         if presentation.expanded { collapse() }
         else { show() }
     }
-    private func collapse() {
+    private func collapse(automatically: Bool = false) {
+        autoClose.openedManually()
         guard presentation.expanded else { return }
         presentation.expanded = false; model.showSettings = false
         panel.resignKey(); panel.orderOut(nil)
         visibilityChanged?(false)
+        if automatically { Self.log.notice("Automatically closed panel; visible: \(self.panel.isVisible)") }
     }
     func showAutomatically(for target: AutoOpenTarget) {
         // Do not navigate away from an answer or settings the user has open.
-        guard !presentation.expanded else { return }
+        guard !presentation.expanded else { autoClose.include(target); return }
         switch target {
         case .request(let key):
             guard model.requests.contains(where: { $0.id == key && $0.state == .pending }) else { return }
             model.selectedRequestID = key; model.showSessions = false
-        case .sessions: model.showSessions = true
+        case .sessions, .finished: model.showSessions = true
         }
         model.showSettings = false
-        show(takingFocus: false)
+        autoClose.openedAutomatically(for: target, sessions: model.sessions)
+        present(takingFocus: false)
         Self.log.notice("Automatically opened panel; keyboard focus: \(self.panel.isKeyWindow)")
     }
-    func show(takingFocus: Bool = true) {
+    func show() {
+        autoClose.openedManually()
+        present(takingFocus: true)
+    }
+    private func present(takingFocus: Bool) {
         let wasVisible = panel.isVisible
         presentation.expanded = true
         place()
@@ -93,7 +101,12 @@ final class AttentionPanel: NSPanel {
         }
     }
     func showSettings() { model.showSettings = true; show() }
-    func refresh() { place() }
+    func refresh() {
+        if model.showSettings { autoClose.openedManually() }
+        if autoClose.update(requests: model.requests, sessions: model.sessions, canClose: !menuTracking) {
+            collapse(automatically: true)
+        } else { place() }
+    }
     private func dismissIfOutside(_ event: NSEvent) {
         let point = event.window?.convertPoint(toScreen: event.locationInWindow) ?? event.locationInWindow
         guard presentation.expanded, !menuTracking, !panel.frame.contains(point) else { return }

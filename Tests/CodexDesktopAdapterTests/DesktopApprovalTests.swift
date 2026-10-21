@@ -17,30 +17,41 @@ func approvals(_ state: JSONValue) throws -> [DesktopApprovals.Pending] {
     try DesktopApprovals.pending(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
 }
 struct DesktopApprovalTests {
+    @Test(arguments: ["auto_review", "guardian_subagent"]) func nativeManualRequestsRemainActionableUnderAnAutomaticTurnReviewer(reviewer: String) throws {
+        let pending = try #require(approvals(approvalState(reviewer: reviewer)).first)
+        #expect(pending.responses["accept"] == .string("accept"))
+        #expect(pending.request.key.nativeID == .integer(7))
+        // Auto-review notifications/items cannot create a human decision card.
+        var noRequest = approvalState(reviewer: reviewer)
+        try DesktopPatches.apply([.object(["op": .string("replace"), "path": .array([.string("requests")]), "value": .array([])])], to: &noRequest)
+        #expect(try approvals(noRequest).isEmpty)
+    }
     @Test func presentationUsesNativeFieldsRatherThanSplittingPromptText() throws {
         let command = "printf 'line one\n\nDirectory: not a folder'"
         let pending = try #require(approvals(approvalState(extra: ["command": .string(command)])).first)
         #expect(pending.request.approvalDetails?.subject == .command(command: command, directory: "/tmp", reason: "Harmless approval test"))
     }
     @Test(arguments: [false, true], [false, true]) func nativeApprovalDispatchIsNotAnExecutionReceipt(dropReply: Bool, acknowledges: Bool) async throws {
-        let server = try FixtureDesktopServer(state: approvalState(), acknowledges: acknowledges, dropAnswer: dropReply); defer { server.stop() }
-        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
-        await adapter.start(threadIDs: ["thread"])
-        try await eventually { await core.snapshot().contains { if case .approval = $0.request.content { return $0.state == .pending }; return false } }
-        let view = try #require(await core.snapshot().first { if case .approval = $0.request.content { return true }; return false })
-        try await core.respond(key: view.id, fingerprint: view.request.fingerprint, answer: .decision("accept"), using: adapter)
-        let sent = try #require(server.answers.first)
-        #expect(sent["method"] == .string("thread-follower-command-approval-decision"))
-        #expect(sent["params"]["requestId"] == .integer(7))
-        #expect(sent["params"]["decision"] == .string("accept"))
-        #expect(await core.snapshot().first { $0.id == view.id }?.state == .uncertain)
-        await #expect(throws: ResponseError.self) {
+        for reviewer in ["user", "auto_review"] {
+            let server = try FixtureDesktopServer(state: approvalState(reviewer: reviewer), acknowledges: acknowledges, dropAnswer: dropReply); defer { server.stop() }
+            let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+            await adapter.start(threadIDs: ["thread"])
+            try await eventually { await core.snapshot().contains { if case .approval = $0.request.content { return $0.state == .pending }; return false } }
+            let view = try #require(await core.snapshot().first { if case .approval = $0.request.content { return true }; return false })
             try await core.respond(key: view.id, fingerprint: view.request.fingerprint, answer: .decision("accept"), using: adapter)
+            let sent = try #require(server.answers.first)
+            #expect(sent["method"] == .string("thread-follower-command-approval-decision"))
+            #expect(sent["params"]["requestId"] == .integer(7))
+            #expect(sent["params"]["decision"] == .string("accept"))
+            #expect(await core.snapshot().first { $0.id == view.id }?.state == .uncertain)
+            await #expect(throws: ResponseError.self) {
+                try await core.respond(key: view.id, fingerprint: view.request.fingerprint, answer: .decision("accept"), using: adapter)
+            }
+            server.state = .object(["requests": .array([]), "turns": .array([])])
+            try await eventually { await core.snapshot().filter(\.needsAttention).isEmpty }
+            #expect(server.answers.count == 1)
+            await adapter.stop()
         }
-        server.state = .object(["requests": .array([]), "turns": .array([])])
-        try await eventually { await core.snapshot().filter(\.needsAttention).isEmpty }
-        #expect(server.answers.count == 1)
-        await adapter.stop()
     }
     @Test func commandIdentityAndExactChoices() throws {
         let one = try #require(approvals(approvalState()).first)
@@ -54,11 +65,12 @@ struct DesktopApprovalTests {
         #expect(one.responses["acceptForSession"] == nil)
         #expect(one.method == "thread-follower-command-approval-decision")
     }
-    @Test func automaticReviewAndUnknownRequiredDataDisableApproval() throws {
-        #expect(throws: (any Error).self) { _ = try approvals(approvalState(reviewer: "auto_review")) }
+    @Test func unknownReviewerAndUnknownRequiredDataDisableApproval() throws {
+        #expect(throws: (any Error).self) { _ = try approvals(approvalState(reviewer: "future-reviewer")) }
         for extra: [String: JSONValue] in [
             ["command": .omitted], ["command": .string(String(repeating: "x", count: 17000))],
             ["availableDecisions": .array([.string("newDecision")])],
+            ["kind": .string("writeStdin")], ["kind": .string("future-action")],
             ["networkApprovalContext": .object(["host": .string("example.com")])],
             ["additionalPermissions": .object(["network": .bool(true)])]
         ] { #expect(throws: (any Error).self) { _ = try approvals(approvalState(extra: extra)) } }
@@ -190,6 +202,10 @@ extension DesktopApprovalTests {
         #expect(pending.responses["deny"] == .object(["action": .string("decline"), "content": .null, "_meta": .null]))
         #expect(pending.responses["once"] == nil)
         #expect(pending.request.approvalDetails?.persistentActions["always"] == .savedPermission)
+        var automaticTurn = state
+        try DesktopPatches.apply([.object(["op": .string("replace"),
+            "path": .array([.string("turns"), .integer(0), .string("params"), .string("approvalsReviewer")]), "value": .string("auto_review")])], to: &automaticTurn)
+        #expect(try approvals(automaticTurn).first?.responses == pending.responses)
         let display = try JSONValue.parse(JSONEncoder().encode(pending.request.approvalDetails))
         let notices = ["Source-provided access warning", "Source risk: high"]
             + (connector == "browser-use" ? ["Requests direct browser control."] : [])
@@ -231,7 +247,7 @@ extension DesktopApprovalTests {
             try await core.respond(key: view.id, fingerprint: view.request.fingerprint, answer: .decision("accept"), using: adapter)
         }
         #expect(server.answers.isEmpty)
-        server.state = approvalState(reviewer: "auto_review")
+        server.state = approvalState(reviewer: "future-reviewer")
         try await eventually { await adapter.health().needsSourceApproval }
         #expect(await core.snapshot().allSatisfy { $0.state == .unavailable })
         await adapter.stop()

@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current local suite passes 179 test functions across 29 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
+This is a development milestone, not universal agent interception. The current local suite passes 192 test functions across 30 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
 
 | Surface | Implemented | Evidence through 2026-10-21 |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ Before submitting, the adapter verifies the owner, current turn and exact questi
 
 Running-turn answers use the native steer method. Completed-turn answers use the native start-turn method with inherited host settings; they do not override permissions, model or collaboration mode. A valid accepted receipt can settle a temporarily unavailable request only with the same epoch and fingerprint.
 
-Approvals reconcile in their own scope, independently of question-history completeness. The parser binds the full native request and complete relevant settings into the displayed fingerprint. A native approval `ok` response is only a dispatch acknowledgment; even a missing request can receive it. The send remains uncertain until authoritative withdrawal closes the card, and cannot be retried. Automatic review and unknown policy/schema values remain disabled. Known approval parsing failures add a health warning; this is not exhaustive detection of every unsupported request kind.
+Approvals reconcile in their own scope, independently of question-history completeness. The parser binds the full native request and complete relevant settings into the displayed fingerprint. A native approval `ok` response is only a dispatch acknowledgment; even a missing request can receive it. The send remains uncertain until authoritative withdrawal closes the card, and cannot be retried. The owner's native pending server-request queue establishes the human prompt: a recognized automatic turn reviewer does not suppress a real manual fallback. Automatic-review progress notifications alone never create approval controls. Unknown reviewer/policy/schema values remain disabled. Stdin approvals are not presented as command execution. Known approval parsing failures add a health warning; this is not exhaustive detection of every unsupported request kind.
 
 Only stream version 11 and recognized complete question shapes become actionable. A version change, malformed state, revision gap or disconnection disables answering. Local permissions and peer UID are checked; the app does not change agent permission settings. Foreign-UID rejection is implemented, but a separate-UID runtime test has not been performed.
 

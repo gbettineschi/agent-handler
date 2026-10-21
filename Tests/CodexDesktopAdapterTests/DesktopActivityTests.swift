@@ -43,9 +43,13 @@ struct DesktopActivityTests {
         #expect(value.attention == .required)
     }
 
-    @Test func humanApprovalAndAutomaticReviewAreDifferent() throws {
+    @Test func nativeManualQueueRequiresInputRegardlessOfTheTurnReviewer() throws {
         #expect(try parse(approvalState()).attention == .required)
-        #expect(try parse(approvalState(reviewer: "auto_review")).attention == .unknown)
+        #expect(try parse(approvalState(reviewer: "auto_review")).attention == .required)
+        var automaticOnly = try JSONValue.parse(fixtureState(questions: []))
+        try DesktopPatches.apply([.object(["op": .string("add"), "path": .array([.string("currentPermissions")]),
+            "value": approvalState(reviewer: "auto_review")["turns"].arrayValue![0]["params"]])], to: &automaticOnly)
+        #expect(try parse(automaticOnly).attention == .clear)
     }
 
     @Test func unknownRequestsAndMalformedQuestionHistoryCannotLookClear() throws {

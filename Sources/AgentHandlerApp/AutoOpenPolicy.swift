@@ -13,7 +13,11 @@ struct AutoOpenSettings: Codable, Equatable {
         if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: "autoOpen.v1") }
     }
 }
-enum AutoOpenTarget: Equatable { case request(RequestKey), sessions }
+struct FinishedSessionID: Hashable {
+    let scope: RequestScope
+    let turn: String?
+}
+enum AutoOpenTarget: Equatable { case request(RequestKey), sessions, finished(Set<FinishedSessionID>) }
 struct AutoOpenPolicy {
     private var seenRequests: Set<RequestKey> = []
     private var requestHistory: [RequestKey] = []
@@ -51,7 +55,10 @@ struct AutoOpenPolicy {
             guard $0.id.scope.installation.hasPrefix("codex-desktop:") else { return false }
             if case .question = $0.request.content { return true }; return false
         }) { return .request(view.id) }
-        if settings.finished, newlyFinished.contains(where: \.isFinished) { return .sessions }
+        if settings.finished {
+            let finished = Set(newlyFinished.filter(\.isFinished).map { FinishedSessionID(scope: $0.id, turn: $0.turnID) })
+            if !finished.isEmpty { return .finished(finished) }
+        }
         return nil
     }
 }
