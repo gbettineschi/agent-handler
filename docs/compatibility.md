@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current local suite passes 192 test functions across 30 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
+This is a development milestone, not universal agent interception. The current local suite passes 193 test functions across 30 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md).
 
 | Surface | Implemented | Evidence through 2026-10-21 |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ This is a development milestone, not universal agent interception. The current l
 ## Tested host
 
 - macOS arm64; local Swift 6.4 with SDK 26.5 selected through task-local wrappers. CI uses its configured macOS-15 toolchain.
-- `/Applications/ChatGPT.app`, bundle ID `com.openai.codex`, version **26.1013.40934**, build **20770**.
+- `/Applications/ChatGPT.app`, bundle ID `com.openai.codex`. Earlier approvals were verified on **26.1013.40934 / 20770**. The final compatibility pass used **26.1016.51333 / 21161**: native question detection, recovery across Agent Handler restart and answer delivery passed again. Fresh approvals on this newer host are a separate check.
 - Private Desktop owner stream version **11**.
 - Read-only metadata: `state_5.sqlite`, required columns `id`, `title`, `archived`, `updated_at`.
 - Native probe: 16 discovery candidates; a compatible owner was found. A separate probe of the current conversation found **one compatible stream and one pending question**. No native answer was sent by a probe.
@@ -49,7 +49,7 @@ Only stream version 11 and recognized complete question shapes become actionable
 - Native snapshots selectively discard unused turn/item metadata during parsing, before the 200,000 retained-node limit. Discarded-object duplicate-key validation has a separate 1 MiB temporary key budget. Patch values retain the raw node cap; a sufficiently large replacement patch can still require conservative resynchronization.
 - Conservative retained-tree accounting: 8 MiB per conversation, 64 MiB across the followed set, depth under 128. These are projection budgets, not exact RSS limits; receive buffers, parser temporaries and copy-on-write versions add transient memory.
 - Unused item and turn metadata fields are discarded before retained-budget admission. Identity, question content and accepted-answer envelopes stay intact; markers preserve paths for later native updates. Required oversized content is still unsupported.
-- Completed questions remain visible across consecutive native reply turns and recognized tool-only continuations. Tool output can neither answer nor end the earlier group. A new ordinary native user prompt ends that group. Gaps, partial item history, empty hydrating turns and unknown input types cannot establish withdrawal. Source-local Skip/dismiss state is not a verified protocol signal.
+- Completed questions remain visible across consecutive native reply turns and recognized tool-output or context-compaction continuations. Neither continuation's contents can answer nor end the earlier group. A new ordinary native user prompt ends that group; interrupted/failed turn boundaries remain terminal. Gaps, partial item history, empty hydrating turns and unknown input types cannot establish withdrawal. Source-local Skip/dismiss state is not a verified protocol signal.
 - Candidate file metadata is checked every five seconds; SQL runs when metadata changes or at least every sixty seconds. No periodic full transcript scan.
 - Ten-second connection/answer deadline, thirty-second frame deadline and capped recovery/reconnect cadence.
 - Activity records describe the latest native Work turn, not completion of an entire agent tree or an external follow-up queue. Visible pending submissions, active goals and queued messages prevent a completed classification. An optional panel opening follows newly observed terminal transitions; this is not durable notification delivery. Ordinary Chat/cloud-only Claude activity sources remain future work.

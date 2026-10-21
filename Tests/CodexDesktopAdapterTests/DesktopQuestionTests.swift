@@ -33,9 +33,9 @@ struct DesktopQuestionTests {
         let activity = try DesktopActivity.parse(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
         #expect(activity.attention == .clear)
     }
-    @Test(arguments: [false, true]) func nativeFunctionOutputIsNeitherAQuestionNorAnAnswer(canonical: Bool) throws {
-        // Observed on a real Desktop thread resumed by send_message_to_thread.
-        let output: [String: Any] = ["type": "functionCallOutput", "id": "native-tool-result",
+    @Test(arguments: [false, true], ["functionCallOutput", "contextCompaction"])
+    func nativeContinuationIsNeitherAQuestionNorAnAnswer(canonical: Bool, kind: String) throws {
+        let output: [String: Any] = ["type": kind, "id": "native-continuation",
             "questions": [["title": "Not a question"]],
             "content": [["type": "text", "text": #"<send_user_message_question_reply>[{"questionItemId":"[\"request_user_input_async\",\"message\",0]","question":"First?","answer":"Yes"}]</send_user_message_question_reply>"#]]]
         let pending = try parseQuestions(fixtureState(canonical: canonical, extraItems: [output]))
@@ -50,14 +50,15 @@ struct DesktopQuestionTests {
         #expect(ended.phase == .completed)
         #expect(ended.attention == .clear)
     }
-    @Test(arguments: [false, true]) func toolResumedTurnRetainsEarlierQuestionsWithoutAnswerAuthority(canonical: Bool) throws {
+    @Test(arguments: [false, true], ["functionCallOutput", "contextCompaction"])
+    func resumedTurnRetainsEarlierQuestionsWithoutAnswerAuthority(canonical: Bool, kind: String) throws {
         var original = try JSONValue.parse(fixtureState())["turns"].arrayValue![0].objectValue!
         original["status"] = .string("completed")
         original["items"] = .array([.object(["type": .string("userMessage"),
             "content": .array([.object(["type": .string("text"), "text": .string("Original task")])])])] + original["items"]!.arrayValue!)
-        // Desktop's chat-management tool resumes a new turn with a tool output, not a user message.
-        // Its contents cannot answer, withdraw or replace the earlier question group.
-        let output = try JSONValue.parse(fixtureState(extraItems: [["type": "functionCallOutput", "id": "tool-result",
+        // Native tool continuations and compaction can lack a new user message.
+        // Their contents cannot answer, withdraw or replace the earlier question group.
+        let output = try JSONValue.parse(fixtureState(extraItems: [["type": kind, "id": "continuation",
             "content": [["type": "text", "text": #"<send_user_message_question_reply>[{"questionItemId":"[\"request_user_input_async\",\"message\",0]","question":"First?","answer":"Yes"}]</send_user_message_question_reply>"#]]]]))["turns"].arrayValue![0]["items"].arrayValue!.last!
         let continuation = JSONValue.object(["turnId": .string("resumed-turn"), "status": .string("completed"), "items": .array([output])])
         func state(_ first: JSONValue) -> JSONValue {
@@ -83,6 +84,30 @@ struct DesktopQuestionTests {
             ], to: &partial)
             #expect(throws: (any Error).self) { _ = try DesktopQuestions.parse(state: partial, threadID: "thread", owner: "owner", installation: "fixture") }
         }
+    }
+    @Test func compactedResumeReadsOnlyTheCurrentQuestionGroup() throws {
+        // Observed after source restart on Desktop 26.1016.51333: a native
+        // compaction turn follows an interrupted turn, without a user message.
+        let previous = JSONValue.object(["turnId": .string("interrupted-turn"), "status": .string("interrupted"),
+            "items": .array([.object(["type": .string("agentMessage"), "id": .string("old-message"),
+                "questions": .array([.object(["title": .string("Old question")])])])])])
+        var current = try JSONValue.parse(fixtureState(extraItems: [["type": "contextCompaction", "id": "compaction"]]))["turns"].arrayValue![0]
+        func state(_ turn: JSONValue) -> JSONValue {
+            .object(["requests": .array([]), "turns": .array([]), "turnHistory": .object(["kind": .string("canonical"), "history": .object([
+                "islands": .array([.object(["entries": .array([.object(["value": .string("old")]), .object(["value": .string("current")])]),
+                    "olderBoundary": .object(["status": .string("available")]), "newerBoundary": .object(["status": .string("exhausted")])])]),
+                "entitiesByKey": .object(["old": previous, "current": turn])])])])
+        }
+        let pending = try DesktopQuestions.parse(state: state(current), threadID: "thread", owner: "owner", installation: "fixture")
+        #expect(pending.map(\.title) == ["First?", "Second?"])
+        #expect(pending.allSatisfy { $0.key.turn == "native-turn" })
+        let empty = try JSONValue.parse(fixtureState(questions: [], extraItems: [["type": "contextCompaction", "id": "compaction"]]))["turns"].arrayValue![0]
+        let activity = try DesktopActivity.parse(state: state(empty), threadID: "thread", owner: "owner", installation: "fixture")
+        #expect(activity.phase == .running)
+        #expect(activity.attention == .clear)
+        try DesktopPatches.apply([.object(["op": .string("add"), "path": .array([.string("itemsPagination")]),
+            "value": .object(["hasLoadedOldest": .bool(false)])])], to: &current)
+        #expect(throws: (any Error).self) { _ = try DesktopQuestions.parse(state: state(current), threadID: "thread", owner: "owner", installation: "fixture") }
     }
     @Test func incompleteHistoryCannotWithdrawOrResurrectQuestions() throws {
         var state = try JSONValue.parse(fixtureState())

@@ -61,6 +61,6 @@ After building tests, run `.build/debug/AgentHandlerDiagnostics --demo` for a sy
 
 The interface takes high-level inspiration from [Open Vibe Island](https://github.com/Octane0411/open-vibe-island), without copying its UI code or assets. It uses system typography and SF Symbols, labeled status, explicit permission actions, and restrained motion that respects Reduce Motion, following Apple’s [buttons](https://developer.apple.com/design/human-interface-guidelines/buttons), [accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), and [motion](https://developer.apple.com/design/human-interface-guidelines/motion) guidance.
 
-For repeatable UI checks, run `bash scripts/render-ui.sh`. It renders synthetic states in unshown windows without contacting agents or taking over the screen. See the [visual review](docs/ui-review.md) for coverage and limitations.
+For repeatable UI checks, run `bash scripts/render-ui.sh`. It renders synthetic states in unshown windows and briefly exercises its own native test panel, without contacting agents. See the [visual review](docs/ui-review.md) for coverage and limitations.
 
 See [third-party notices](THIRD_PARTY_NOTICES.md) for the narrow Agent HUD code adaptations and their Apache-2.0 license. This repository is private; original project code has no public license grant.

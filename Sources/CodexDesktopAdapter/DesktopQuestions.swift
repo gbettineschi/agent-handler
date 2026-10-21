@@ -50,10 +50,10 @@ public enum DesktopQuestions {
                     guard hasOldest else { throw Failure.unsupported }
                     break
                 }
-                // Desktop can resume a turn through its chat-management tool. The tool result
-                // has no user-answer authority and cannot end an earlier question group. Follow
-                // the complete history back to a native user boundary instead of losing liveness.
-                guard items.contains(where: { $0["type"].stringValue == "functionCallOutput" }) else { throw Failure.unsupported }
+                // Desktop can resume through a tool result or synthesize a turn for native
+                // compaction. Neither is a user answer or a new prompt. Follow the complete
+                // history back to a native user/terminal boundary instead of losing liveness.
+                guard items.contains(where: { ["functionCallOutput", "contextCompaction"].contains($0["type"].stringValue ?? "") }) else { throw Failure.unsupported }
                 continue
             }
             guard userItems.allSatisfy({ !answeredQuestionIDs($0).isEmpty }) else { break }
