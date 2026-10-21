@@ -94,8 +94,9 @@ Read-only inspection found nine native local-session metadata/audit pairs on thi
 
 The current Code CLI's supported `auth status` command reported signed out. Claude Desktop still showed Free, and the user confirmed on 20 October that no paid Claude account is currently available. A read-only observer probe found no new activity; historical audits did not reappear. Fresh native local observation is pending an available runtime. Current cloud Cowork execution may not produce the same local audit store, so paid access alone is not a passing integration test. Source visibility and a fresh init/result sequence must be verified.
 
-1. Native command Cancel and browser Deny, plus fresh shell auto-opening under an eligible user-reviewed policy. Shell Allow, app Allow/Deny and browser Allow have live passing evidence in [verification.md](verification.md).
-2. A fresh completed-turn question: exact native reply receipt and sibling retention, without resending an old request.
-3. Claude: verify a fresh local audit init/result/wait sequence and separately establish live response ownership, callback lifetime/cancellation and acceptance before implementing response delivery.
-4. Regular Chat is deferred. Revisit only with a usable lifecycle source or an explicitly selected alternative surface.
-5. Real host reconnect, sleep/wake and uncertain-send restart, plus multiple-display placement in [verification.md](verification.md). Keyboard and adaptive sizing checks have passed; VoiceOver is excluded at the user's request.
+Supported shell Allow/Cancel, app Allow/Deny and browser Allow/Deny have live passing evidence, including fresh blocking auto-opening, in [verification.md](verification.md). Check the actual request turn's permissions: the owner's base permission field can retain older granular values while the current turn uses user-reviewed `on-request`.
+
+1. A fresh completed-turn question: exact native reply receipt and sibling retention, without resending an old request.
+2. Claude: verify a fresh local audit init/result/wait sequence and separately establish live response ownership, callback lifetime/cancellation and acceptance before implementing response delivery.
+3. Regular Chat is deferred. Revisit only with a usable lifecycle source or an explicitly selected alternative surface.
+4. Real host reconnect, sleep/wake and uncertain-send restart, plus multiple-display placement in [verification.md](verification.md). Keyboard and adaptive sizing checks have passed; VoiceOver is excluded at the user's request.

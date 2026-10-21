@@ -60,11 +60,12 @@ After the retention fix, another 30.02-second live sample used 0.17 CPU seconds 
 
 ## Acceptance still required
 
-1. Real user-reviewed shell Cancel and browser-origin Deny, each through Agent Handler with source refusal and withdrawal. A live shell Allow passed on 2026-10-20; fresh app Allow/Deny and browser-origin Allow passed on 2026-10-21. The latest shell auto-opening retest still awaits an eligible source policy. See the [prepared setup](live-approval-setup.md).
-2. A fresh completed-turn question with an exact native start-turn receipt. Answer arrival and withdrawal have passed; clean idle-receipt settlement remains unverified.
-3. Source-host loss/restart, distinct from the passing Agent Handler connection toggle and application restart. Controlled socket EOF/reconnect cases pass.
-4. Whole-app restart after a truly uncertain native send. Synthetic SQLite/controller reopen and ledger SIGKILL checks pass; they do not establish this native case.
-5. Real sleep/wake and multiple-display placement. Keyboard and adaptive-panel checks passed in the dated UI work below; VoiceOver was excluded at the user's request. Ordinary ChatGPT Chat remains deferred and paid Claude live tests remain pending.
+Supported shell Allow/Cancel, app Allow/Deny and browser-origin Allow/Deny now have real passing evidence, including blocking automatic opening. See the dated approval acceptance pass below and the [setup record](live-approval-setup.md).
+
+1. A fresh completed-turn question with an exact native start-turn receipt. Answer arrival and withdrawal have passed; clean idle-receipt settlement remains unverified.
+2. Source-host loss/restart, distinct from the passing Agent Handler connection toggle and application restart. Controlled socket EOF/reconnect cases pass.
+3. Whole-app restart after a truly uncertain native send. Synthetic SQLite/controller reopen and ledger SIGKILL checks pass; they do not establish this native case.
+4. Real sleep/wake and multiple-display placement. Keyboard and adaptive-panel checks passed in the dated UI work below; VoiceOver was excluded at the user's request. Ordinary ChatGPT Chat remains deferred and paid Claude live tests remain pending.
 
 Synthetic tests are not proof that these live interaction checks passed.
 
@@ -364,3 +365,17 @@ Failing parser/format tests preceded implementation. Coverage includes preferred
 The signed live build visibly showed `Codex 70% left · resets in 6d`, with no Agent Handler text in the header; an independent native usage read reported 30% consumed and the same reset. Both actual running sessions and their activity hints remained visible. The update was installed by restarting only Agent Handler. No source request was answered and no permission mode or auto-opening preference was changed during this pass.
 
 The first GitHub run failed only the fixture's outer four-second stopwatch (4.44 seconds); its child-cleanup assertion passed. The revised test checks the specific timeout, output-limit and cancellation failures instead of including executor scheduling in the protocol deadline. No production timeout was relaxed.
+
+## 2026-10-21 — fresh shell Allow/Cancel and browser Deny
+
+The user reselected Ask for approval in the existing test chat after it joined the local agent-handler project. Fresh actual turn parameters then reported `on-request`, reviewer `user` and `workspaceWrite`. The separate base `currentPermissions` field continued to contain the older granular policy with shell flags false. It must not be used alone to declare a turn blocked; the adapter already validates the pending request's own turn parameters first. These observations establish the working policy for the tested turns, not the cause of the base-field discrepancy. The temporary global Custom configuration had already been restored; a final SHA-256 comparison confirmed the original file remained byte-for-byte intact.
+
+All three tests began with the panel closed and blocking auto-opening enabled. Production Panel logs recorded automatic opening with `keyboard focus: false` before inspection. Source status independently reported `waitingOnApproval`; a read-only native adapter probe found one matching supported approval. Computer use inspected the exact controls and submitted each decision through the live Agent Handler UI.
+
+| Test | Automatic opening (UTC) | Decision and native result |
+| --- | --- | --- |
+| Shell Allow | 16:30:31.557 | Allow once. `/usr/bin/printf` emitted `agent-handler-shell-allow-20261021`, exit code 0; the native command item completed and the card withdrew. A new durable closed record was observed at 16:31:02. No saved-rule choice was selected. |
+| Shell Cancel | 16:32:02.958 | Cancel turn. Native turn `01a15f4e-1fe0-71f3-bb8e-6f59d535b25d` became interrupted, with no executed command item or marker output. The panel showed Cancelled, its approval queue emptied, and the exact captured request digest closed durably at 16:32:18. No retry or fallback ran. |
+| Browser Deny | 16:33:12.594 | Deny for `https://www.rfc-editor.org`. The exact source computer-tool result states that the user declined approval and the origin gate did not grant network access. Its native MCP item failed, the card withdrew, and the exact captured request digest closed durably at 16:33:36. No retry or alternate route was attempted. |
+
+The ledger increased from 26 to 29 records across these three decisions. Final native inspection found zero pending requests. Preferences remained **blocking on / finished off / non-blocking off**, with Desktop tracking enabled. The main implementation chat remained Full access; only the existing test chat used the user's selected review mode. No source-host restart, real sleep/wake or uncertain-send restart is claimed. No application code changed during this acceptance pass, so the existing 174-test / nineteen-layout CI result remains the last synthetic verification rather than a new run.
