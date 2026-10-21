@@ -7,6 +7,9 @@ public actor DesktopAdapter: ResponseTransport {
         public let known: Int
         public let message: String
         public let needsSourceApproval: Bool
+        /// Presentation only: a verified owner was observed, even if its history is unreadable.
+        public let observedConversations: Set<String>
+        public let sourceApprovalConversations: Set<String>
     }
     let stream: DesktopStream
     private let directory: URL
@@ -18,6 +21,7 @@ public actor DesktopAdapter: ResponseTransport {
     private var generation = UUID()
     private var known = 0
     private var unsupportedApprovals: Set<String> = []
+    private var observedConversations: Set<String> = []
     private var deliveries: [UUID: Task<DeliveryOutcome, Never>] = [:]
     private var activityStore = ActivityStore()
     private var activityOwners: [RequestScope: (owner: String, epoch: UUID)] = [:]
@@ -28,6 +32,8 @@ public actor DesktopAdapter: ResponseTransport {
     }
     public func start(threadIDs: Set<String>) {
         wanted = Set(threadIDs.sorted().prefix(16))
+        observedConversations.formIntersection(wanted)
+        unsupportedApprovals.formIntersection(wanted)
         for scope in Set(activityOwners.keys).union(activityStore.views.map(\.id)) where !wanted.contains(scope.conversation) {
             activityStore.remove(scope: scope); activityOwners.removeValue(forKey: scope)
         }
@@ -69,11 +75,13 @@ public actor DesktopAdapter: ResponseTransport {
         let activity = views.isEmpty ? "" : " · \(views.filter { $0.status == .running }.count) running · \(views.filter { $0.status == .needsInput }.count) need input · \(views.filter { $0.status == .completed }.count) completed · \(views.filter { $0.status == .failed }.count) failed · \(views.filter { $0.status == .cancelled }.count) cancelled · \(views.filter { $0.status == .unknown }.count) unknown"
         return .init(followed: wanted.count, known: known, message: message + activity +
             (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"),
-            needsSourceApproval: !unsupportedApprovals.isEmpty)
+            needsSourceApproval: !unsupportedApprovals.isEmpty,
+            observedConversations: observedConversations, sourceApprovalConversations: unsupportedApprovals)
     }
     private func reconcile(token: UUID) async {
         guard token == generation else { return }
         let threads = stream.threads
+        observedConversations.formUnion(Set(threads.keys).intersection(wanted))
         reconcileActivity(threads)
         known = 0
         unsupportedApprovals = unsupportedApprovals.intersection(wanted)
@@ -95,20 +103,34 @@ public actor DesktopAdapter: ResponseTransport {
                     epochs[source] = (thread.ownerClientID, epoch)
                 }
                 do {
-                    let requests = isApproval
-                        ? try DesktopApprovals.pending(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation).map(\.request)
-                        : try DesktopQuestions.parse(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation)
+                    let requests: [AttentionRequest]
+                    if isApproval {
+                        let pending = try DesktopApprovals.pending(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation)
+                        requests = pending.map(\.request)
+                        if Self.hasSourceOnlyApproval(thread.state, handled: pending.map(\.wireID)) { unsupportedApprovals.insert(threadID) }
+                        else { unsupportedApprovals.remove(threadID) }
+                    } else {
+                        requests = try DesktopQuestions.parse(state: thread.state, threadID: threadID, owner: thread.ownerClientID, installation: installation)
+                    }
                     guard token == generation else { return }
                     await controller.observe(.init(scope: source, epoch: epoch, revision: thread.revision, requests: requests))
-                    if isApproval { unsupportedApprovals.remove(threadID) }
                     if !isApproval || !requests.isEmpty { recognized = true }
                 } catch {
-                    if isApproval { unsupportedApprovals.insert(threadID) }
+                    // An unreadable queue is not evidence of an approval. Retain
+                    // an existing fallback until recovery; create one only from
+                    // an actual pending native approval/elicitation request.
+                    if isApproval, Self.hasSourceOnlyApproval(thread.state) { unsupportedApprovals.insert(threadID) }
                     await controller.invalidate(scope: source, epoch: epoch)
                 }
                 guard token == generation else { return }
             }
             if recognized { known += 1 }
+        }
+    }
+    private static func hasSourceOnlyApproval(_ state: JSONValue, handled: [JSONValue] = []) -> Bool {
+        (state["requests"].arrayValue ?? []).contains {
+            ["item/commandExecution/requestApproval", "mcpServer/elicitation/request"].contains($0["method"].stringValue ?? "") &&
+                ($0["completed"] == .null || $0["completed"] == .bool(false)) && !handled.contains($0["id"])
         }
     }
     private func reconcileActivity(_ threads: [String: DesktopStream.Thread]) {

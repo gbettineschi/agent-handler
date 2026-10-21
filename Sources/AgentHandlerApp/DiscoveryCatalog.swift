@@ -1,8 +1,22 @@
 import CodexDesktopAdapter
+import AgentHandlerCore
 
 /// Discovery provides candidate IDs, never response authority or activity state.
 /// A failed catalog read must not turn existing subscriptions into an empty set.
 struct DiscoveryCatalog {
+    static func selection(pending: [String], explicit: [String], activities: [ActivityView], observed: Set<String>, sourceOnly: Set<String>, candidates: [String]) -> [String] {
+        let activityIDs = Set(activities.map { $0.id.conversation })
+        let unresolved = activities.filter {
+            if [.running, .needsInput].contains($0.status) { return true }
+            // Lost availability cannot turn an observed clear terminal state
+            // into a permanently pinned active session.
+            return $0.status == .unknown && ($0.isCurrent || $0.phase == .running || $0.attention != .clear)
+        }.map { $0.id.conversation }
+        let ordered = pending + sourceOnly.sorted() + explicit + unresolved + observed.subtracting(activityIDs).sorted() + candidates
+        var selected: [String] = []
+        for id in ordered where !selected.contains(id) && selected.count < 16 { selected.append(id) }
+        return selected
+    }
     private(set) var candidates: [ThreadCandidate] = []
     private(set) var diagnostic: String?
     var retryNeeded: Bool { diagnostic != nil }

@@ -65,10 +65,10 @@ struct AutoOpenPolicyTests {
         value.save(to: defaults)
         #expect(AutoOpenSettings.load(from: defaults) == value)
     }
-    @Test func claudePermissionWaitDoesNotReplayAcrossUnknownGaps() {
+    @Test(arguments: [false, true]) func sourcePermissionWaitDoesNotReplayAcrossUnknownGaps(codex: Bool) {
         var policy = AutoOpenPolicy()
         func row(_ status: ActivityStatus) -> SessionSummary {
-            .init(id: .init(installation: "claude-local-audit:fixture", conversation: "c"), title: "Claude", status: status, request: nil, turnID: "t")
+            .init(id: .init(installation: codex ? "codex-desktop:fixture" : "claude-local-audit:fixture", conversation: "c"), title: "Source", status: status, request: nil, turnID: "t", needsSourceApproval: codex && status == .needsInput)
         }
         let first = policy.update(requests: [], sessions: [row(.needsInput)], newlyFinished: [], settings: .init())
         #expect(first == .sessions)
@@ -86,6 +86,17 @@ struct AutoOpenPolicyTests {
         #expect(first != nil)
         let next = policy.update(requests: requests, sessions: [], newlyFinished: [], settings: .init())
         #expect(next == nil)
+    }
+    @Test func aSourceOnlyRequestCanAppearBesideARetainedCard() {
+        var policy = AutoOpenPolicy()
+        let retained = request(true, state: .unavailable)
+        var row = SessionSummary(id: scope, title: "Chat", status: .needsInput, request: retained, turnID: "t", needsSourceApproval: true)
+        #expect(policy.update(requests: [retained], sessions: [row], newlyFinished: [], settings: .init()) == .sessions)
+        #expect(policy.update(requests: [retained], sessions: [row], newlyFinished: [], settings: .init()) == nil)
+        row.needsSourceApproval = false
+        _ = policy.update(requests: [retained], sessions: [row], newlyFinished: [], settings: .init())
+        row.needsSourceApproval = true
+        #expect(policy.update(requests: [retained], sessions: [row], newlyFinished: [], settings: .init()) == .sessions)
     }
 
     @Test func unresolvedInputCannotExpireEvenAfterTheOldFinishDeadline() {

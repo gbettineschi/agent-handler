@@ -44,11 +44,11 @@ struct AutoClosePolicyTests {
         policy.openedAutomatically(for: .request(first.id), sessions: [])
         #expect({ policy.update(requests: [request(state: .accepted)], sessions: []) }())
     }
-    @Test func readOnlyClaudeWaitNeedsPositiveRecoveryRatherThanMissingData() {
+    @Test(arguments: [false, true]) func sourceWaitNeedsPositiveRecoveryRatherThanMissingData(codex: Bool) {
         var policy = AutoClosePolicy()
         func row(_ status: ActivityStatus) -> SessionSummary {
-            .init(id: .init(installation: "claude-local-audit:fixture", conversation: "claude"), title: "Claude",
-                status: status, request: nil, turnID: "turn")
+            .init(id: .init(installation: codex ? "codex-desktop:fixture" : "claude-local-audit:fixture", conversation: "source"), title: "Source",
+                status: status, request: nil, turnID: "turn", needsSourceApproval: codex && status == .needsInput)
         }
         policy.openedAutomatically(for: .sessions, sessions: [row(.needsInput)])
         #expect(!{ policy.update(requests: [], sessions: [row(.unknown)]) }())

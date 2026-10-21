@@ -54,16 +54,24 @@ private struct SessionRow: View {
                     Text(label).foregroundStyle(tint)
                         .help(session.activityDetail == nil ? label : "Latest native activity; updates while the agent runs.")
                 }.font(.system(size: 11))
-                if let preview = session.request?.request.title.trimmingCharacters(in: .whitespacesAndNewlines), !preview.isEmpty {
+                if !sourceOnly, let preview = session.request?.request.title.trimmingCharacters(in: .whitespacesAndNewlines), !preview.isEmpty {
                     Text(preview).font(.system(size: 12)).foregroundStyle(.secondary)
                         .lineLimit(2).multilineTextAlignment(.leading)
+                }
+                if session.needsSourceApproval {
+                    Text(sourceOnly ? "This request needs the Codex app." : "Another request needs the Codex app.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
             if session.request != nil { Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 5) }
         }.padding(.horizontal, 16).padding(.vertical, 13).frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle()).accessibilityElement(children: .combine)
     }
+    private var sourceOnly: Bool {
+        session.needsSourceApproval && (session.request.map { ![.pending, .sending].contains($0.state) } ?? true)
+    }
     private var label: String {
+        if sourceOnly { return "Review in Codex" }
         if let request = session.request {
             switch request.state {
             case .sending: return "Sending…"

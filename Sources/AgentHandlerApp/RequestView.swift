@@ -26,10 +26,6 @@ struct HandlerPanelView: View {
                             PanelIconButton(title: "Dismiss message", symbol: "xmark") { model.issue = nil }
                         }.padding(12).background(.orange.opacity(0.10)).panelMeasuredHeight(.issue)
                 }
-                if model.needsSourceApproval && model.enabled {
-                    Label("Some approvals need the source app.", systemImage: "exclamationmark.triangle")
-                        .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true).padding(12).frame(maxWidth: .infinity, alignment: .leading).panelMeasuredHeight(.sourceApproval)
-                }
                 if let warning = model.trackingWarning, model.enabled {
                     Label(warning, systemImage: "exclamationmark.triangle")
                         .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true).padding(12).frame(maxWidth: .infinity, alignment: .leading).panelMeasuredHeight(.warning)

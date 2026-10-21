@@ -1,8 +1,34 @@
 import Testing
+import AgentHandlerCore
 @testable import AgentHandlerApp
 @testable import CodexDesktopAdapter
 
 struct DiscoveryCatalogTests {
+    @Test func disconnectedTerminalHistoryCannotOccupyEveryTrackingSlot() {
+        var store = ActivityStore()
+        let ids = (1...16).map { "finished-\($0)" }
+        for id in ids {
+            let scope = RequestScope(installation: "codex-desktop:fixture", conversation: id)
+            let epoch = store.begin(scope: scope)
+            store.observe(.init(scope: scope, epoch: epoch, revision: 1, turnID: "turn", phase: .completed, attention: .clear))
+            store.invalidate(scope: scope, epoch: epoch)
+        }
+        let selected = DiscoveryCatalog.selection(pending: [], explicit: [], activities: store.views, observed: Set(ids), sourceOnly: [], candidates: ["new-chat"] + ids)
+        #expect(selected.first == "new-chat")
+        #expect(selected.count == 16)
+    }
+    @Test func explicitTrackingIsNotStarvedByOrdinaryActiveRows() {
+        var store = ActivityStore()
+        for index in 1...16 {
+            let scope = RequestScope(installation: "codex-desktop:fixture", conversation: "active-\(index)")
+            let epoch = store.begin(scope: scope)
+            store.observe(.init(scope: scope, epoch: epoch, revision: 1, turnID: "turn", phase: .running, attention: .clear))
+        }
+        let selected = DiscoveryCatalog.selection(pending: ["pending"], explicit: ["explicit"], activities: store.views, observed: [], sourceOnly: [], candidates: [])
+        #expect(selected.first == "pending")
+        #expect(selected.contains("explicit"))
+        #expect(selected.count == 16)
+    }
     @Test func failuresRetainSubscriptionsUntilAnAuthoritativeSuccess() {
         var catalog = DiscoveryCatalog()
         catalog.update(.success([.init(id: "active", title: "Actual title")]))

@@ -13,6 +13,52 @@ func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws 
 }
 
 struct DesktopAdapterTests {
+    @Test func unreadableFirstActivityRetainsItsVerifiedOwnerWithoutInventingATurn() async throws {
+        let state = JSONValue.object(["title": .string("Owned chat"), "requests": approvalState(reviewer: "future-reviewer")["requests"], "turns": .array([])])
+        let server = try FixtureDesktopServer(state: state); defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.health().needsSourceApproval }
+        #expect(await adapter.health().observedConversations == ["thread"])
+        #expect(await adapter.health().sourceApprovalConversations == ["thread"])
+        #expect(await adapter.activity().isEmpty)
+        #expect(await core.snapshot().isEmpty)
+        server.stop()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await adapter.health().observedConversations == ["thread"])
+        await adapter.start(threadIDs: [])
+        #expect(await adapter.health().observedConversations.isEmpty)
+        #expect(server.answers.isEmpty)
+        await adapter.stop()
+    }
+    @Test func absentRequestDataIsNotReportedAsAHumanApproval() async throws {
+        var fields = try #require(JSONValue.parse(fixtureState(questions: [])).objectValue)
+        fields.removeValue(forKey: "requests")
+        let server = try FixtureDesktopServer(state: .object(fields)); defer { server.stop() }
+        let adapter = DesktopAdapter(directory: server.directory, controller: RequestController(ledger: MemoryLedger()))
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.health().known == 1 }
+        #expect(await adapter.health().needsSourceApproval == false)
+        #expect(await adapter.health().sourceApprovalConversations.isEmpty)
+        #expect(server.answers.isEmpty)
+        await adapter.stop()
+    }
+    @Test func unhandledNativeElicitationHasAScopedFallbackUntilItWithdraws() async throws {
+        var state = approvalState().objectValue!
+        state["requests"] = .array([.object(["id": .integer(42), "method": .string("mcpServer/elicitation/request"),
+            "params": .object(["threadId": .string("thread"), "turnId": .string("turn"),
+                "_meta": .object(["codex_approval_kind": .string("mcp_tool_call"), "connector_id": .string("another-connector")])])])])
+        let server = try FixtureDesktopServer(state: .object(state)); defer { server.stop() }
+        let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.health().sourceApprovalConversations == ["thread"] }
+        #expect(await core.snapshot().isEmpty)
+        state["requests"] = .array([]); server.state = .object(state)
+        try await eventually { await adapter.health().sourceApprovalConversations.isEmpty }
+        #expect(await adapter.health().observedConversations == ["thread"])
+        #expect(server.answers.isEmpty)
+        await adapter.stop()
+    }
     @Test func nativeTitleFollowsOwnerSnapshotAndRenameWithoutSendingAnswers() async throws {
         var state = try #require(JSONValue.parse(fixtureState(questions: [])).objectValue)
         state["title"] = .string("Real chat title")

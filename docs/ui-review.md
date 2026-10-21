@@ -85,6 +85,8 @@ Automatic presentation preserves keyboard focus in the other app, and leaves the
 
 Automatic presentation also owns closing: resolved requests close its panel once no unresolved input remains. Uncertain, sending and unavailable requests keep it open. Claude audit waits require a positive recovery, not missing data. Finish-triggered openings retain the exact newly finished turns; only those notices and later automatic finish events extend the lifetime. Dismissal, expiry or resumed work clears each finish reason. Manual opening or Settings cancels automatic closing. Open menus defer closure while the policy continues observing new waits.
 
+Source-only Codex requests now use the same blocking notification lifetime as read-only Claude waits. Their titled session remains visible with Review in Codex and an explicit source-app notice, even beside a retained unavailable card. The vague global approval banner is removed. A verified owner without readable activity still gets an Unavailable row; missing queue data does not invent an approval. Three additional renders cover source-only input, unavailable native state and a retained card, bringing the matrix to twenty-seven layouts. The native panel fixture verifies wait → unknown → positive recovery without hiding the session early.
+
 The [expired fixture](images/ui/finished-expired.png) verifies that only the still-running session remains after the deadline. Settings rendering includes all three switches within the adaptive height limit.
 
 

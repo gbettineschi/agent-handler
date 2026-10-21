@@ -18,6 +18,8 @@ import ClaudeDesktopAdapter
     @Published var selectedConversations = 0
     @Published var connectionChecked = false
     @Published var needsSourceApproval = false
+    @Published var observedCodexConversations: Set<String> = []
+    @Published var sourceApprovalConversations: Set<String> = []
     @Published var trackingWarning: String?
     @Published var issue: String?
     @Published var showSettings = false
@@ -33,7 +35,11 @@ import ClaudeDesktopAdapter
     private var presentationTimer: Task<Void, Never>?
     private var savedLifecycle: Data?
     private var observedSessions: [SessionSummary] {
-        SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs)
+        func scopes(_ ids: Set<String>) -> Set<RequestScope> {
+            Set(ids.map { RequestScope(installation: adapter.installation, conversation: $0) })
+        }
+        return SessionSummary.rows(activities: activities + claudeActivities, requests: requests, titles: titles, recentIDs: recentConversationIDs,
+            observedScopes: scopes(observedCodexConversations), sourceApprovalScopes: scopes(sourceApprovalConversations))
     }
     var hiddenSessions: [SessionSummary] { ordering.sorted(lifecycle.hidden(observedSessions, now: sessionClock)) }
     var sessions: [SessionSummary] { ordering.sorted(lifecycle.visible(observedSessions, now: sessionClock)) }
@@ -262,10 +268,11 @@ import ClaudeDesktopAdapter
                     .merging(ownerTitles, uniquingKeysWith: { _, native in native })
                 recentConversationIDs = candidates.map(\.id)
             }
-            let pinned = requests.map { $0.id.scope.conversation }
+            // A parser/connection failure must not evict a previously owned
+            // active session in favor of fresh catalog history.
             let explicit = extraThreads.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.utf8.count <= 256 }
-            var selected: [String] = []
-            for id in pinned + explicit + candidates.map(\.id) where !selected.contains(id) && selected.count < 16 { selected.append(id) }
+            let selected = DiscoveryCatalog.selection(pending: requests.map { $0.id.scope.conversation }, explicit: explicit,
+                activities: activities, observed: observedCodexConversations, sourceOnly: sourceApprovalConversations, candidates: candidates.map(\.id))
             if !catalog.retryNeeded || !selected.isEmpty {
                 lifecycle.establishBaseline(conversations: Set(selected + candidates.map(\.id)))
             }
@@ -275,9 +282,12 @@ import ClaudeDesktopAdapter
         trackingWarning = catalog.warning
         connectedConversations = state.known; selectedConversations = state.followed; connectionChecked = true
         needsSourceApproval = state.needsSourceApproval
+        observedCodexConversations = state.observedConversations
+        sourceApprovalConversations = state.sourceApprovalConversations
         activities = await adapter.activity()
         ownerTitles.merge(await adapter.conversationTitles(), uniquingKeysWith: { _, native in native })
         let retained = Set(recentConversationIDs + activities.map { $0.id.conversation } + requests.map { $0.id.scope.conversation })
+            .union(observedCodexConversations).union(sourceApprovalConversations)
         ownerTitles = ownerTitles.filter { retained.contains($0.key) }
         titles.merge(ownerTitles, uniquingKeysWith: { _, native in native })
         health = [catalog.diagnostic, state.message, await claude.health()].compactMap { $0 }.joined(separator: "\n")
@@ -299,6 +309,7 @@ import ClaudeDesktopAdapter
     }
     func loadDemo(_ scenario: DemoScenario? = nil) async {
         guard demo else { return }
+        observedCodexConversations = []; sourceApprovalConversations = []; needsSourceApproval = false
         codexUsage = try? CodexUsageSnapshot.decode(Data("{\"rateLimits\":{\"primary\":{\"usedPercent\":29,\"windowDurationMins\":10080,\"resetsAt\":\(Date().addingTimeInterval(500_000).timeIntervalSince1970)}}}".utf8))
         lifecycle = SessionLifecycle(); ordering = SessionOrdering(); dismissal = nil; autoOpenPolicy = AutoOpenPolicy()
         let generation = UUID(); demoGeneration = generation

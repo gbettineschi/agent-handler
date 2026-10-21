@@ -19,6 +19,24 @@ func parseQuestions(_ data: Data) throws -> [AttentionRequest] {
 }
 
 struct DesktopQuestionTests {
+    @Test(arguments: [false, true], [false, true])
+    func nativeImageAttachmentsDoNotDisableQuestions(canonical: Bool, large: Bool) throws {
+        let url = "data:image/png;base64," + (large ? String(repeating: "A", count: 24_000) : "test")
+        let image: [String: Any] = ["type": "image", "url": url, "detail": "original"]
+        let user: [String: Any] = ["type": "userMessage", "id": "image-input", "content": [image]]
+        let data = try fixtureState(canonical: canonical, extraItems: [user])
+        #expect(try parseQuestions(data).map(\.title) == ["First?", "Second?"])
+        let projected = try JSONValue.parse(data, leavingOutStringsOver: 16_384)
+        let activity = try DesktopActivity.parse(state: projected, threadID: "thread", owner: "owner", installation: "fixture")
+        #expect(activity.phase == .running)
+        #expect(activity.attention == .required)
+    }
+    @Test func malformedImageInputsCannotWithdrawQuestions() throws {
+        for url: Any in ["", NSNull(), true, 17] {
+            let user: [String: Any] = ["type": "userMessage", "content": [["type": "image", "url": url]]]
+            #expect(throws: (any Error).self) { _ = try parseQuestions(fixtureState(extraItems: [user])) }
+        }
+    }
     @Test(arguments: [false, true]) func imageViewingCannotHideOrCreateQuestions(canonical: Bool) throws {
         let image: [String: Any] = ["type": "imageView", "id": "image-tool",
             "questions": [["title": "Not an agent question"]],

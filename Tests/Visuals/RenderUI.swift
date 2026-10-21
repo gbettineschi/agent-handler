@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import AgentHandlerCore
+@testable import AgentHandlerCore
 @testable import AgentHandlerApp
 
 /// Production views in fixture windows, plus a native panel lifetime check. No input injection,
@@ -118,6 +118,21 @@ import AgentHandlerCore
         model.updateSessionPresentation()
         guard window.isVisible else { throw Failure.dimensions }
         print("automatic panel lifetime: uncertain stays visible; authoritative withdrawal hides; manual and Settings stay visible")
+        window.performClose(nil)
+        model.showSettings = false; model.activities = []; model.requests = []
+        model.observedCodexConversations = ["source-only"]; model.sourceApprovalConversations = ["source-only"]
+        model.updateSessionPresentation()
+        let scope = model.sessions.first!.id
+        panel.showAutomatically(for: .sessions)
+        guard window.isVisible, model.sessions.first?.status == .needsInput else { throw Failure.dimensions }
+        model.sourceApprovalConversations = []; model.updateSessionPresentation()
+        guard window.isVisible, model.sessions.first?.status == .unknown else { throw Failure.dimensions }
+        var recovered = ActivityStore()
+        let recovery = recovered.begin(scope: scope)
+        recovered.observe(.init(scope: scope, epoch: recovery, revision: 1, turnID: "recovered-turn", phase: .running, attention: .clear))
+        model.activities = recovered.views; model.updateSessionPresentation()
+        guard !window.isVisible else { throw Failure.dimensions }
+        print("source-only panel lifetime: native wait stays visible; unknown data retains its row; positive recovery hides")
     }
     @MainActor private static func render() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -136,6 +151,9 @@ import AgentHandlerCore
             ("uncertain", .uncertain, 420, 480, true, false, false),
             ("sessions", .empty, 420, 400, true, false, false),
             ("sessions-narrow", .empty, 340, 400, true, false, false),
+            ("source-only-approval", .empty, 420, 400, true, false, false),
+            ("source-state-unavailable", .empty, 340, 400, true, false, false),
+            ("source-only-retained", .empty, 340, 400, true, false, false),
             ("quota-narrow", .questions, 340, 400, true, false, false),
             ("quota-unavailable", .empty, 420, 400, true, false, false),
             ("sessions-thinking", .empty, 420, 400, true, false, false),
@@ -172,6 +190,23 @@ import AgentHandlerCore
             if scenario == .unavailable { precondition(model.requests.allSatisfy { $0.state == .unavailable }) }
             if scenario == .uncertain { precondition(model.requests.count == 1 && model.requests[0].state == .uncertain) }
             if scenario == .empty { precondition(model.requests.isEmpty && model.sessions.count == 3) }
+            if name.hasPrefix("source-") {
+                model.activities = []; model.observedCodexConversations = ["source-example"]
+                model.titles["source-example"] = "Review the project changes"
+                if name != "source-state-unavailable" {
+                    model.sourceApprovalConversations = ["source-example"]; model.needsSourceApproval = true
+                }
+                model.updateSessionPresentation()
+                precondition(model.sessions.count == 1 && model.sessions.first?.request == nil)
+                precondition(model.sessions.first?.title == "Review the project changes")
+                precondition(model.sessions.first?.status == (name == "source-state-unavailable" ? .unknown : .needsInput))
+                if name == "source-only-retained", let scope = model.sessions.first?.id {
+                    let retained = AttentionRequest(key: .init(scope: .init(installation: scope.installation + ":approvals", conversation: scope.conversation), turn: "earlier", nativeID: .integer(7)),
+                        owner: "fixture", title: "Earlier native approval", content: .approval(choices: [.init(id: "accept", label: "Allow")]))
+                    model.requests = [.init(request: retained, state: .unavailable)]; model.updateSessionPresentation()
+                    precondition(model.sessions.count == 1 && model.sessions.first?.status == .needsInput && model.sessions.first?.needsSourceApproval == true)
+                }
+            }
             if name == "finished-expired" {
                 model.updateSessionPresentation(now: Date().addingTimeInterval(301))
                 precondition(model.sessions.count == 1 && model.sessions.allSatisfy { !$0.isFinished })

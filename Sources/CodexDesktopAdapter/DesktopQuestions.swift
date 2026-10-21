@@ -39,6 +39,10 @@ public enum DesktopQuestions {
                     switch type {
                     case "text": return $0["text"].stringValue != nil
                     case "localImage": return $0["path"].stringValue?.isEmpty == false
+                    // Native image attachments use a URL, often a large data URI.
+                    // The decoder's omitted marker still proves a nonempty string;
+                    // image bytes have no question or answer authority.
+                    case "image": return $0["url"].stringValue?.isEmpty == false || $0["url"] == .omitted
                     default: return false
                     }
                 }) else { throw Failure.unsupported }

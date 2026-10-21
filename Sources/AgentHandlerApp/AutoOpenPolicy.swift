@@ -21,7 +21,7 @@ enum AutoOpenTarget: Equatable { case request(RequestKey), sessions, finished(Se
 struct AutoOpenPolicy {
     private var seenRequests: Set<RequestKey> = []
     private var requestHistory: [RequestKey] = []
-    private var claudeState: [RequestScope: SessionSummary] = [:]
+    private var sourceState: [RequestScope: SessionSummary] = [:]
 
     mutating func update(requests: [RequestView], sessions: [SessionSummary], newlyFinished: [SessionSummary],
                          settings: AutoOpenSettings, enabled: Bool = true) -> AutoOpenTarget? {
@@ -31,25 +31,25 @@ struct AutoOpenPolicy {
         requestHistory = Array(requestHistory.suffix(512))
         seenRequests = seenRequests.intersection(Set(requests.map(\.id))).union(requestHistory)
 
-        // Claude's read-only audit reports actual permission waits. Unknown gaps
-        // do not rearm them; an observed running state or a new turn does.
-        var newClaudeWait = false
-        for session in sessions where session.isClaude && session.status != .unknown {
-            let old = claudeState[session.id]
-            if session.status == .needsInput, session.request == nil,
-               old?.status != .needsInput || old?.turnID != session.turnID { newClaudeWait = true }
-            claudeState[session.id] = session
+        // Read-only Claude waits and source-only Codex requests never acquire
+        // response controls here. Unknown gaps cannot rearm their notification.
+        var newSourceWait = false
+        for session in sessions where (session.isClaude || session.needsSourceApproval || sourceState[session.id] != nil) && session.status != .unknown {
+            let old = sourceState[session.id]
+            if session.status == .needsInput, session.request == nil || session.needsSourceApproval,
+               old?.status != .needsInput || old?.turnID != session.turnID || (session.needsSourceApproval && old?.needsSourceApproval != true) { newSourceWait = true }
+            sourceState[session.id] = session
         }
-        if claudeState.count > 256 {
+        if sourceState.count > 256 {
             let current = Set(sessions.map(\.id))
-            claudeState = claudeState.filter { current.contains($0.key) }
+            sourceState = sourceState.filter { current.contains($0.key) }
         }
         guard enabled else { return nil }
         if settings.blocking {
             if let view = fresh.first(where: { if case .approval = $0.request.content { return true }; return false }) {
                 return .request(view.id)
             }
-            if newClaudeWait { return .sessions }
+            if newSourceWait { return .sessions }
         }
         if settings.nonBlocking, let view = fresh.first(where: {
             guard $0.id.scope.installation.hasPrefix("codex-desktop:") else { return false }

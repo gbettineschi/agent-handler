@@ -36,6 +36,8 @@ Finished rows have a small, muted × to dismiss that turn. A ten-second Undo (Co
 
 The live adapter observes at most 16 recent local conversations, prioritizing already-pending requests and explicitly selected IDs. Local metadata supplies candidates; only a verified owner stream makes a question actionable. Discovery uses `state_5.sqlite`; an unsupported metadata schema is reported in connection details while discovery retries automatically. `CODEX_HOME` is honored when supplied to the process, otherwise `~/.codex` is used.
 
+A chat identified by its native owner stays visible when its activity cannot be read, with Unavailable instead of an inferred completion. Requests that cannot be handled here show Review in Codex on that chat, with its title; they do not acquire invented Allow/Deny buttons or expire as finished sessions. Blocking auto-opening also covers these source-only requests, and an unknown gap does not count as resolution. Image attachments do not disable native question tracking; their bytes are not interpreted as questions or answers.
+
 ## Core guarantees and limits
 
 - Independent request IDs: simultaneous questions do not replace one another.
