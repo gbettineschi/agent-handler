@@ -1,6 +1,6 @@
 # Remaining live approval checks
 
-Updated 20 October 2026. Diagnose the current Desktop connection failure before another approval test. Earlier Clock approval and native question/restart results remain historical evidence; they do not establish that the latest running connection is healthy.
+Updated 21 October 2026. The live connection and native question delivery have been rechecked. Earlier approval round trips remain dated evidence; a call that produces no native prompt cannot verify a new approval round trip.
 
 ## Connection failure is fixed and live question recovery passed
 
@@ -12,9 +12,9 @@ The full **112-test / 19-suite** run passed and independent review found no bloc
 
 This conversation uses the local agent-handler project and directory. Do not ask the user to move it again.
 
-The current resumed turn's native owner snapshot reports reviewer `user`, policy `never`, sandbox `dangerFullAccess`. The Font Book check produced zero native pending requests, so no post-fix app Allow/Deny result is established. Shell commands cannot produce human approvals in this mode.
+The main implementation turn uses `never` / `dangerFullAccess`, so it cannot generate a shell gate. The user explicitly authorized isolated tests in the existing test chat and switched that chat to human-reviewed **Ask for approval**. A new native turn then reported reviewer `user`, sandbox `workspaceWrite`, and a granular policy with `mcp_elicitations` / `request_permissions` true but `sandbox_approval` / `rules` false. Thus the reviewer change succeeded; the shell escalation category remains disabled. No shell escalation was attempted under that policy and no marker command ran.
 
-An earlier project-backed turn used granular workspace permissions with MCP prompts enabled but shell/rule categories disabled. The user-reported composer label alone did not prove shell eligibility. These are observations from different turns, not evidence that Agent Handler selects or changes source permissions.
+The user-reported composer label alone does not prove shell eligibility. Reviewer selection and allowed approval categories are independent settings, as described in the [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference). Agent Handler does not change source permissions. App/browser approval categories can be eligible even when shell escalation is disabled.
 
 For the next actual approval test, start a fresh turn using a user-reviewed permission mode that allows the intended prompt category, and verify its effective settings first. The documented manual-review configuration is:
 
@@ -29,9 +29,9 @@ The desktop documentation lists **Ask for approval** and **Custom (config.toml)*
 ## Acceptance gates
 
 1. Completed after this fix: a fresh question survived restart, was answered through Agent Handler and withdrew after native arrival.
-2. Produce a fresh eligible app approval. Capture the exact native request while pending; verify the Agent Handler card and exact Allow/Deny scope, source continuation/refusal and authoritative withdrawal.
+2. Completed 21 October: genuine ColorSync Utility Allow-for-conversation and Grapher Deny, including automatic opening, source continuation/refusal, card withdrawal and durable closure.
 3. With an effective policy that permits shell prompts, request a harmless marker print. Review the exact command/directory, choose **Allow once**, then verify the command result and withdrawal. Do not save a command rule for this test.
-4. Produce a genuine browser-origin confirmation for a harmless public page. Verify its native scope, the Agent Handler response, source continuation and withdrawal. Creating an agent-owned tab that opens without a prompt is not a browser acceptance test.
+4. Completed 21 October: genuine IANA origin confirmation, automatic opening, Allow once, page-title read, created-tab cleanup and durable withdrawal. Browser Deny remains separately pending. Creating an agent-owned tab that opens without a prompt is not a browser acceptance test.
 5. Preserve uncertain delivery without retry. An approval dispatch acknowledgment alone is not execution or denial proof. Keep source-host restart, true uncertain-send restart and real sleep/wake as separate remaining gates.
 
 Sources: [OpenAI permission modes](https://learn.chatgpt.com/docs/permission-modes), [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [approval security](https://learn.chatgpt.com/docs/agent-approvals-security). Local observations apply to the installed host and the specific turn tested.
