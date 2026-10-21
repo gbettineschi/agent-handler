@@ -209,11 +209,18 @@ struct HandlerPanelView: View {
     }
 }
 
-private struct SingleRequestView: View {
+struct SingleRequestView: View {
     @State private var approvalActionsHeight: CGFloat = 180
+    @State private var approvalReview: ApprovalReview
     let view: RequestView
     @Binding var draft: QuestionDraft
     let answer: (UserAnswer) -> Void
+
+    init(view: RequestView, draft: Binding<QuestionDraft>, answer: @escaping (UserAnswer) -> Void,
+         review: ApprovalReview = ApprovalReview()) {
+        self.view = view; self._draft = draft; self.answer = answer
+        self._approvalReview = State(initialValue: review)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -254,18 +261,20 @@ private struct SingleRequestView: View {
                             }
                         }
                     case .approval:
-                        let paragraphs = view.request.title.components(separatedBy: "\n\n")
-                        Text(paragraphs.first ?? view.request.title).font(.system(size: 17, weight: .semibold)).textSelection(.enabled)
-                        if paragraphs.count > 1 {
-                            Text(paragraphs.dropFirst().joined(separator: "\n\n"))
-                                .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                        if let id = approvalReview.choiceID, let action = view.request.approvalDetails?.persistentActions[id] {
+                            ApprovalPersistentDetailsView(action: action)
+                            Divider()
+                        }
+                        if let details = view.request.approvalDetails {
+                            ApprovalDetailsView(details: details)
+                        } else {
+                            Text(view.request.title).font(.system(size: 13)).textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                                .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 10))
                         }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 16).panelMeasuredHeight(.content)
             }.scrollBounceBehavior(.basedOnSize).scrollIndicators(.visible)
+                .id(approvalReview.choiceID)
             Divider()
             switch view.request.content {
             case .question(let options, let allowsText):
@@ -278,16 +287,10 @@ private struct SingleRequestView: View {
                         .keyboardShortcut(.return, modifiers: .command).help("Send answer (⌘Return)")
                         .disabled(view.state != .pending || draft.answer(options: options, allowsText: allowsText) == nil)
                 }.padding(16).panelMeasuredHeight(.actions)
-            case .approval(let choices):
+            case .approval:
                 ScrollView {
-                    VStack(spacing: 8) {
-                        ForEach(choices, id: \.id) { choice in
-                            Button { answer(.decision(choice.id)) } label: {
-                                Text(choice.label).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }.buttonStyle(RequestActionStyle()).handlerFocusRing().disabled(view.state != .pending)
-                        }
-                    }.padding(16).panelMeasuredHeight(.actions, limit: 180)
+                    ApprovalActionsView(request: view.request, state: view.state, answer: answer, review: $approvalReview)
+                        .padding(16).panelMeasuredHeight(.actions, limit: 260)
                 }.scrollBounceBehavior(.basedOnSize).frame(height: approvalActionsHeight)
                     .onPreferenceChange(PanelContentHeights.self) { heights in
                         if let height = heights[.actions], abs(approvalActionsHeight - height) >= 1 {

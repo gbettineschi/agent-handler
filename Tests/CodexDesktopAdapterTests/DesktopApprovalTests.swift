@@ -17,6 +17,11 @@ func approvals(_ state: JSONValue) throws -> [DesktopApprovals.Pending] {
     try DesktopApprovals.pending(state: state, threadID: "thread", owner: "desktop-owner", installation: "fixture")
 }
 struct DesktopApprovalTests {
+    @Test func presentationUsesNativeFieldsRatherThanSplittingPromptText() throws {
+        let command = "printf 'line one\n\nDirectory: not a folder'"
+        let pending = try #require(approvals(approvalState(extra: ["command": .string(command)])).first)
+        #expect(pending.request.approvalDetails?.subject == .command(command: command, directory: "/tmp", reason: "Harmless approval test"))
+    }
     @Test(arguments: [false, true], [false, true]) func nativeApprovalDispatchIsNotAnExecutionReceipt(dropReply: Bool, acknowledges: Bool) async throws {
         let server = try FixtureDesktopServer(state: approvalState(), acknowledges: acknowledges, dropAnswer: dropReply); defer { server.stop() }
         let core = RequestController(ledger: MemoryLedger()), adapter = DesktopAdapter(directory: server.directory, controller: core)
@@ -69,6 +74,7 @@ struct DesktopApprovalTests {
         guard case .approval(let choices) = pending.request.content else { Issue.record("Expected approval"); return }
         #expect(choices[1].label.contains("save command rule"))
         #expect(choices[1].label.contains("/usr/bin/printf"))
+        #expect(pending.request.approvalDetails?.persistentActions["command-rule-1"] == .commandRule(prefix: ["/usr/bin/printf", "test\\n"]))
         let unknown = JSONValue.object(["acceptWithExecpolicyAmendment": .object(["execpolicy_amendment": .array([.string("printf")]), "future": .bool(true)])])
         #expect(throws: (any Error).self) { _ = try approvals(approvalState(extra: ["availableDecisions": .array([unknown])])) }
     }
@@ -168,7 +174,8 @@ extension DesktopApprovalTests {
     @Test(arguments: ["computer-use", "browser-use"]) func elicitationKeepsNativeScopeAndDenyPayload(connector: String) throws {
         var state = approvalState()
         let meta = JSONValue.object(["codex_approval_kind": .string("mcp_tool_call"), "connector_id": .string(connector),
-            "tool_name": .string(connector == "computer-use" ? "get_app_state" : "access_browser_origin"),
+            "tool_name": .string(connector == "computer-use" ? "get_app_state" : "access_browser_origin_with_raw_cdp"),
+            "subtitle": .string("Source-provided access warning"), "riskLevel": .string("high"),
             "persist": .array([.string("session"), .string("always")]),
             "tool_params": .object(connector == "computer-use" ? ["app": .string("com.example.Test")] : ["origin": .string("https://example.com")])])
         let params = JSONValue.object(["threadId": .string("thread"), "turnId": .string("turn"), "mode": .string("form"),
@@ -182,6 +189,11 @@ extension DesktopApprovalTests {
         #expect(pending.responses["always"]?["_meta"]["persist"] == .string("always"))
         #expect(pending.responses["deny"] == .object(["action": .string("decline"), "content": .null, "_meta": .null]))
         #expect(pending.responses["once"] == nil)
+        #expect(pending.request.approvalDetails?.persistentActions["always"] == .savedPermission)
+        let display = try JSONValue.parse(JSONEncoder().encode(pending.request.approvalDetails))
+        let notices = ["Source-provided access warning", "Source risk: high"]
+            + (connector == "browser-use" ? ["Requests direct browser control."] : [])
+        #expect(display["subject"]["access"]["notices"] == .array(notices.map(JSONValue.string)))
         for (field, value): (String, JSONValue) in [("allOf", .array([.object(["required": .array([.string("confirmation")])])])), ("minProperties", .integer(1))] {
             var changed = state
             try DesktopPatches.apply([.object(["op": .string("add"),

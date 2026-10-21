@@ -87,6 +87,9 @@ import AgentHandlerCore
         let cases: [(String, DemoScenario, CGFloat, CGFloat, Bool, Bool, Bool)] = [
             ("question", .questions, 420, 400, true, false, false),
             ("approval", .approval, 420, 480, true, false, false),
+            ("approval-narrow", .approval, 340, 480, true, false, false),
+            ("approval-long", .approval, 340, 480, true, false, false),
+            ("approval-browser", .approval, 420, 400, true, false, false),
             ("long-content", .longContent, 420, 400, true, false, false),
             ("long-narrow", .longContent, 340, 400, true, false, false),
             ("unavailable", .unavailable, 420, 400, true, false, false),
@@ -108,6 +111,21 @@ import AgentHandlerCore
         for (name, scenario, width, height, expanded, settings, contrast) in cases {
             await model.loadDemo(scenario)
             model.requests = await model.core.snapshot().filter(\.needsAttention)
+            if ["approval-long", "approval-browser"].contains(name), let old = model.requests.first?.request {
+                let details: ApprovalDetails
+                if name == "approval-browser" {
+                    details = .init(subject: .access(message: "Allow Browser use to access this website?", targetLabel: "Website", target: "https://example.com", notices: ["Requests direct browser control."], technicalDetails: "Native browser permission details"), persistentActions: ["always": .savedPermission])
+                } else {
+                    details = .init(subject: .command(command: "example-tool" + String(repeating: " --example='a value with spaces'", count: 20), directory: "/Users/example/Projects/" + String(repeating: "a-long-folder/", count: 10), reason: "This is a synthetic approval with long command and folder text. No command will run."), persistentActions: ["rule": .commandRule(prefix: ["example-tool", "--example=a value with spaces"])])
+                }
+                let choices: [ResponseOption] = name == "approval-browser"
+                    ? [.init(id: "once", label: "Allow once"), .init(id: "always", label: "Always allow"), .init(id: "deny", label: "Deny")]
+                    : [.init(id: "accept", label: "Allow once"), .init(id: "rule", label: "Original native rule label"), .init(id: "cancel", label: "Cancel turn")]
+                let request = AttentionRequest(key: old.key, owner: old.owner, title: "Synthetic native approval", content: .approval(choices: choices), approvalDetails: details)
+                let epoch = await model.core.begin(scope: old.key.scope)
+                await model.core.observe(.init(scope: old.key.scope, epoch: epoch, revision: 1, requests: [request]))
+                model.requests = await model.core.snapshot().filter(\.needsAttention)
+            }
             model.updateSessionPresentation()
             model.showSessions = scenario == .empty
             model.showSettings = settings
@@ -197,6 +215,39 @@ import AgentHandlerCore
             print("\(name): \(bitmap.pixelsWide)×\(bitmap.pixelsHigh)")
         }
         try await verifyAdaptiveTransitions(model: model)
+        for long in [false, true] {
+            await model.loadDemo(.approval)
+            guard let original = await model.core.snapshot().first(where: { $0.id == model.selectedRequestID })?.request else { throw Failure.render }
+            let prefix = long ? ["example-tool"] + Array(repeating: "--example=a value with spaces", count: 40) : ["/usr/bin/printf", "example\\n"]
+            let approval = AttentionRequest(key: original.key, owner: original.owner, title: original.title,
+                content: original.content, approvalDetails: .init(subject: original.approvalDetails!.subject,
+                    persistentActions: ["rule": .commandRule(prefix: prefix)]))
+            let epoch = await model.core.begin(scope: approval.key.scope)
+            await model.core.observe(.init(scope: approval.key.scope, epoch: epoch, revision: 1, requests: [approval]))
+            guard let fixture = await model.core.snapshot().first(where: { $0.id == approval.key }) else { throw Failure.render }
+            var review = ApprovalReview(); _ = review.select("rule", in: approval, state: .pending)
+            var measured: CGFloat = 0, actions: CGFloat = 0
+            let reviewRoot = SingleRequestView(view: fixture, draft: .constant(QuestionDraft()), answer: { _ in }, review: review)
+                .font(.system(size: 13)).padding(.top, 16)
+                .background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, .dark)
+                .onPreferenceChange(PanelContentHeights.self) { values in
+                    measured = values.values.reduce(17, +); actions = values[.actions] ?? 0
+                }
+            let width: CGFloat = long ? 340 : 420
+            let reviewHost = NSHostingView(rootView: reviewRoot); reviewHost.sizingOptions = []
+            let reviewWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+            reviewWindow.isReleasedWhenClosed = false; reviewWindow.contentView = reviewHost
+            reviewWindow.appearance = NSAppearance(named: .darkAqua)
+            _ = try await settleHeight(window: reviewWindow, host: reviewHost, width: width, measured: { measured })
+            guard actions > 0, actions < 100, !long || abs(reviewHost.bounds.height - 640) <= 1 else { throw Failure.dimensions }
+            guard let bitmap = reviewHost.bitmapImageRepForCachingDisplay(in: reviewHost.bounds) else { throw Failure.render }
+            reviewHost.cacheDisplay(in: reviewHost.bounds, to: bitmap)
+            guard let png = bitmap.representation(using: .png, properties: [:]) else { throw Failure.render }
+            let name = long ? "approval-rule-review-long" : "approval-rule-review"
+            try png.write(to: output.appendingPathComponent(name + ".png"))
+            print("\(name): \(bitmap.pixelsWide)×\(bitmap.pixelsHigh); fixed actions: \(actions)")
+            reviewWindow.close()
+        }
         await model.loadDemo(.empty)
         model.requests = await model.core.snapshot().filter(\.needsAttention)
         model.updateSessionPresentation()

@@ -43,6 +43,8 @@ enum DesktopApprovals {
                 guard categories.allSatisfy({ granular[$0] == .bool(true) }) else { throw Failure.unsupported }
             }
             var title: String, method: String, parameter: String
+            var subject: ApprovalDetails.Subject?
+            var persistentActions: [String: ApprovalDetails.PersistentAction] = [:]
             var responses: [String: JSONValue] = [:], options: [ResponseOption] = []
             if kind == "item/commandExecution/requestApproval" {
                 guard let turnID, !turnID.isEmpty, turn?["status"].stringValue == "inProgress",
@@ -66,12 +68,14 @@ enum DesktopApprovals {
                         let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.array(prefix)), as: UTF8.self)
                         guard text.utf8.count <= 4096 else { throw Failure.unsupported }
                         name = "command-rule-\(index)"; label = "Allow and save command rule: \(text)"
+                        persistentActions[name] = .commandRule(prefix: prefix.compactMap(\.stringValue))
                     } else { throw Failure.unsupported }
                     guard responses[name] == nil, !responses.values.contains(decision) else { throw Failure.unsupported }
                     responses[name] = decision; options.append(.init(id: name, label: label))
                 }
                 title = "Run command?\n\n\(command)\n\nDirectory: \(cwd)"
                 if params["reason"] != .null { guard let reason = params["reason"].stringValue else { throw Failure.unsupported }; title += "\n\n\(reason)" }
+                subject = .command(command: command, directory: cwd, reason: params["reason"].stringValue)
                 method = "thread-follower-command-approval-decision"; parameter = "decision"
             } else {
                 let meta = params["_meta"]
@@ -111,16 +115,26 @@ enum DesktopApprovals {
                 responses["deny"] = .object(["action": .string("decline"), "content": .null, "_meta": .null])
                 options.append(.init(id: "deny", label: "Deny"))
                 title = message
+                var notices: [String] = []
                 for field in ["subtitle", "riskLevel"] where meta[field] != .null {
                     guard let value = meta[field].stringValue else { throw Failure.unsupported }; title += "\n\n\(value)"
+                    if !value.isEmpty { notices.append(field == "riskLevel" ? "Source risk: \(value)" : value) }
+                }
+                if meta["tool_name"].stringValue == "access_browser_origin_with_raw_cdp" {
+                    notices.append("Requests direct browser control.")
                 }
                 if meta["tool_params"] != .null { title += "\n\n" + String(decoding: try RecordCoding.encoder().encode(meta["tool_params"]), as: UTF8.self) }
+                let app = meta["connector_id"].stringValue == "computer-use"
+                subject = .access(message: message, targetLabel: app ? "App" : "Website",
+                    target: meta["tool_params"][app ? "app" : "origin"].stringValue ?? "", notices: notices, technicalDetails: title)
+                if persist.contains("always") { persistentActions["always"] = .savedPermission }
                 method = "thread-follower-submit-mcp-server-elicitation-response"; parameter = "response"
             }
             guard title.utf8.count <= 16_384 else { throw Failure.unsupported }
             let source = try [wire, settings].map { String(decoding: try RecordCoding.encoder().encode($0), as: UTF8.self) }
             let request = AttentionRequest(key: .init(scope: .init(installation: Self.installation(installation), conversation: threadID), turn: turnID, nativeID: id),
-                owner: owner, title: title, content: .approval(choices: options), sourceFingerprint: RecordCoding.hash(source))
+                owner: owner, title: title, content: .approval(choices: options), sourceFingerprint: RecordCoding.hash(source),
+                approvalDetails: subject.map { ApprovalDetails(subject: $0, persistentActions: persistentActions) })
             found.append(.init(request: request, wireID: wire["id"], method: method, parameter: parameter, responses: responses))
         }
         guard found.count <= 128, Set(found.map { $0.request.key }).count == found.count else { throw Failure.unsupported }

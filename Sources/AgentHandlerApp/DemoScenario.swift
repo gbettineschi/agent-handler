@@ -17,8 +17,8 @@ enum DemoScenario: String, CaseIterable, Identifiable {
     }
 
     func requests(scope: RequestScope, turn: String) -> [AttentionRequest] {
-        func request(_ id: String, _ title: String, _ content: RequestContent) -> AttentionRequest {
-            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string(id)), owner: "demo", title: title, content: content)
+        func request(_ id: String, _ title: String, _ content: RequestContent, details: ApprovalDetails? = nil) -> AttentionRequest {
+            AttentionRequest(key: .init(scope: scope, turn: turn, nativeID: .string(id)), owner: "demo", title: title, content: content, approvalDetails: details)
         }
         let question = request("first", "Which option should I use?",
             .question(options: [.init(id: "simple", label: "Keep it simple"), .init(id: "details", label: "Show the details")], allowsText: true))
@@ -29,7 +29,9 @@ enum DemoScenario: String, CaseIterable, Identifiable {
             return [request("approval", "Run command?\n\n/usr/bin/printf 'This is a synthetic approval — no command will run.\\n'\n\nDirectory: /Users/example/Projects/agent-handler\n\nAllow a harmless connection check?",
                 .approval(choices: [.init(id: "accept", label: "Allow once"),
                     .init(id: "rule", label: "Allow and save command rule: [\"/usr/bin/printf\",\"This is a synthetic approval — no command will run.\"]"),
-                    .init(id: "cancel", label: "Cancel turn")]))]
+                    .init(id: "cancel", label: "Cancel turn")]), details: .init(
+                        subject: .command(command: "/usr/bin/printf 'This is a synthetic approval — no command will run.\\n'", directory: "/Users/example/Projects/agent-handler", reason: "Allow a harmless connection check?"),
+                        persistentActions: ["rule": .commandRule(prefix: ["/usr/bin/printf", "This is a synthetic approval — no command will run."])]))]
         case .longContent:
             return [request("long", "How should I handle the remaining changes?\n\nThere are several independent tasks in this example. Review the choices, scroll through the complete text, or write your own answer. Your draft stays here if you close the panel or open Settings.",
                 .question(options: [
@@ -40,7 +42,8 @@ enum DemoScenario: String, CaseIterable, Identifiable {
         case .unavailable: return [question]
         case .uncertain:
             return [request("uncertain", "Run command?\n\n/usr/bin/printf 'Synthetic delivery check\\n'\n\nDirectory: /Users/example/Projects/agent-handler",
-                .approval(choices: [.init(id: "accept", label: "Allow once"), .init(id: "cancel", label: "Cancel turn")]))]
+                .approval(choices: [.init(id: "accept", label: "Allow once"), .init(id: "cancel", label: "Cancel turn")]),
+                details: .init(subject: .command(command: "/usr/bin/printf 'Synthetic delivery check\\n'", directory: "/Users/example/Projects/agent-handler", reason: nil)))]
         case .empty: return []
         }
     }

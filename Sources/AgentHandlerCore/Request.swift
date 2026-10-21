@@ -29,18 +29,27 @@ public struct AttentionRequest: Equatable, Codable, Sendable {
     public let title: String
     public let content: RequestContent
     public let sourceFingerprint: String?
-    public init(key: RequestKey, owner: String, title: String, content: RequestContent, sourceFingerprint: String? = nil) {
+    public let approvalDetails: ApprovalDetails?
+    public init(key: RequestKey, owner: String, title: String, content: RequestContent, sourceFingerprint: String? = nil, approvalDetails: ApprovalDetails? = nil) {
         self.key = key; self.owner = owner; self.title = title; self.content = content; self.sourceFingerprint = sourceFingerprint
+        self.approvalDetails = approvalDetails
     }
-    public var fingerprint: String { stableDigest(self) }
+    // Preserve the exact pre-presentation encoding: UI decoration must not alter
+    // durable identity or rearm an uncertain submission across an app update.
+    public var fingerprint: String { stableDigest(Identity(key: key, owner: owner, title: title, content: content, sourceFingerprint: sourceFingerprint)) }
+    private struct Identity: Encodable {
+        let key: RequestKey; let owner: String; let title: String
+        let content: RequestContent; let sourceFingerprint: String?
+    }
     var isValid: Bool {
         let options: [ResponseOption]
         switch content {
         case .question(let values, let text):
-            guard text || !values.isEmpty else { return false }; options = values
+            guard approvalDetails == nil, text || !values.isEmpty else { return false }; options = values
         case .approval(let values): guard !values.isEmpty else { return false }; options = values
         }
-        return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && title.utf8.count <= 16_384
+        return (approvalDetails?.isValid(choiceIDs: Set(options.map(\.id))) ?? true)
+            && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && title.utf8.count <= 16_384
             && !owner.isEmpty && !key.scope.installation.isEmpty && !key.scope.conversation.isEmpty
             && options.count <= 128 && Set(options.map(\.id)).count == options.count
             && options.allSatisfy { !$0.id.isEmpty && !$0.label.isEmpty && $0.label.utf8.count <= 16_384 }
