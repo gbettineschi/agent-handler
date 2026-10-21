@@ -60,11 +60,11 @@ After the retention fix, another 30.02-second live sample used 0.17 CPU seconds 
 
 ## Acceptance still required
 
-1. Real user-reviewed shell deny/cancel and browser-origin decisions, each through Agent Handler with source refusal/continuation and withdrawal. A live shell Allow passed on 2026-10-20 (see the dated result below). The real Clock app approval is a separate passing result. See the [prepared setup](live-approval-setup.md) for the current saved-versus-active policy discrepancy.
+1. Real user-reviewed shell Cancel and browser-origin Deny, each through Agent Handler with source refusal and withdrawal. A live shell Allow passed on 2026-10-20; fresh app Allow/Deny and browser-origin Allow passed on 2026-10-21. The latest shell auto-opening retest still awaits an eligible source policy. See the [prepared setup](live-approval-setup.md).
 2. A fresh completed-turn question with an exact native start-turn receipt. Answer arrival and withdrawal have passed; clean idle-receipt settlement remains unverified.
 3. Source-host loss/restart, distinct from the passing Agent Handler connection toggle and application restart. Controlled socket EOF/reconnect cases pass.
 4. Whole-app restart after a truly uncertain native send. Synthetic SQLite/controller reopen and ledger SIGKILL checks pass; they do not establish this native case.
-5. Real sleep/wake. Display/keyboard/UI checks stay deferred with UI work. Ordinary ChatGPT Chat remains deferred and paid Claude live tests remain pending.
+5. Real sleep/wake and multiple-display placement. Keyboard and adaptive-panel checks passed in the dated UI work below; VoiceOver was excluded at the user's request. Ordinary ChatGPT Chat remains deferred and paid Claude live tests remain pending.
 
 Synthetic tests are not proof that these live interaction checks passed.
 

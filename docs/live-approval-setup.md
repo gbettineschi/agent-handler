@@ -26,11 +26,13 @@ sandbox_mode = "workspace-write"
 
 The desktop documentation lists **Ask for approval** and **Custom (config.toml)** where available. Managed requirements and existing app/origin grants may affect whether a particular call needs a new prompt. Do not manufacture one, override current permissions through private IPC, or count an unprompted call as acceptance.
 
+On 21 October, a read-only owner-state check reconfirmed this chat's `never` / `dangerFullAccess` and the test chat's human-reviewed granular policy with both shell flags false. Under the user's request to fix the permission for testing, the three documented settings above were added as top-level Custom defaults, preserving all other configuration values and saving a private backup. The existing “Test interactive question tool” chat must select **Custom (config.toml)** and start a fresh turn before the new settings can be verified. Preparation is not proof of the chat's effective policy or a completed approval test.
+
 ## Acceptance gates
 
 1. Completed after this fix: a fresh question survived restart, was answered through Agent Handler and withdrew after native arrival.
 2. Completed 21 October: genuine ColorSync Utility Allow-for-conversation and Grapher Deny, including automatic opening, source continuation/refusal, card withdrawal and durable closure.
-3. With an effective policy that permits shell prompts, request a harmless marker print. Review the exact command/directory, choose **Allow once**, then verify the command result and withdrawal. Do not save a command rule for this test.
+3. With an effective policy that permits shell prompts, request harmless marker prints in separate turns. Review the exact command/directory and verify **Allow once**, then **Cancel turn** with no execution. Do not save a command rule for this test. The earlier shell Allow passed on 20 October; fresh shell auto-opening and Cancel remain pending.
 4. Completed 21 October: genuine IANA origin confirmation, automatic opening, Allow once, page-title read, created-tab cleanup and durable withdrawal. Browser Deny remains separately pending. Creating an agent-owned tab that opens without a prompt is not a browser acceptance test.
 5. Preserve uncertain delivery without retry. An approval dispatch acknowledgment alone is not execution or denial proof. Keep source-host restart, true uncertain-send restart and real sleep/wake as separate remaining gates.
 
