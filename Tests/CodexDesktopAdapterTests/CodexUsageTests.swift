@@ -72,10 +72,17 @@ struct CodexUsageTests {
             }
             task.cancel()
         }
-        let start = Date()
         do { _ = try await task.value; Issue.record("Expected a bounded reader failure") }
-        catch { }
-        #expect(Date().timeIntervalSince(start) < 4)
+        catch {
+            // Executor/CI scheduling is outside the protocol deadline. Assert the
+            // actual fence that fired, rather than a wall clock around await.
+            switch (mode, error) {
+            case ("hang", CodexUsageReader.Failure.timedOut),
+                 ("oversize", CodexUsageReader.Failure.invalidReply): break
+            case ("cancel", is CancellationError): break
+            default: Issue.record("Unexpected reader failure: \(error)")
+            }
+        }
         #expect(try fixture.childStopped())
     }
 
