@@ -3,13 +3,13 @@ import Testing
 import AgentHandlerCore
 @testable import CodexDesktopAdapter
 
-func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws {
-    let end = ContinuousClock.now + .seconds(3)
+func eventually(timeout: Duration = .seconds(3), _ condition: @escaping @Sendable () async -> Bool) async throws {
+    let end = ContinuousClock.now + timeout
     while ContinuousClock.now < end {
         if await condition() { return }
         try await Task.sleep(for: .milliseconds(10))
     }
-    try #require(await condition(), "Fixture condition did not arrive within three seconds")
+    try #require(await condition(), "Fixture condition did not arrive before its deadline")
 }
 
 struct DesktopAdapterTests {

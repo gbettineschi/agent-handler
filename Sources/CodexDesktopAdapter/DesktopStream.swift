@@ -51,6 +51,9 @@ public final class DesktopStream: @unchecked Sendable {
     private var published: [String: Thread] = [:]
     private var connectionStatus: DesktopDiagnostics.Connection = .stopped
     private var observationIssues: [String: DesktopDiagnostics.Issue] = [:]
+    /// Allocation hint only: the hub explicitly found no owner on this connection.
+    /// Retained through search retries, never used to withdraw input or authorize a response.
+    private var unowned: Set<String> = []
     private var running = false
     private var generation = 0
     // Survives gaps/reconnects for the same owner. A new owner establishes a new revision domain.
@@ -71,6 +74,7 @@ public final class DesktopStream: @unchecked Sendable {
             interests[interest] = threadIDs.isEmpty ? nil : threadIDs
             wanted = interests.values.reduce(into: []) { $0.formUnion($1) }
             observationIssues = observationIssues.filter { wanted.contains($0.key) }
+            unowned.formIntersection(wanted)
             revisionFloors = revisionFloors.filter { wanted.contains($0.key) }
             lock.broadcast()
             guard !wanted.isEmpty, !running else { return nil }
@@ -115,8 +119,8 @@ public final class DesktopStream: @unchecked Sendable {
 
     public func thread(_ threadID: String) -> Thread? { lock.withLock { published[threadID] } }
 
-    var diagnosticState: (connection: DesktopDiagnostics.Connection, issues: [String: DesktopDiagnostics.Issue]) {
-        lock.withLock { (wanted.isEmpty ? .stopped : connectionStatus, observationIssues) }
+    var diagnosticState: (connection: DesktopDiagnostics.Connection, issues: [String: DesktopDiagnostics.Issue], unowned: Set<String>) {
+        lock.withLock { (wanted.isEmpty ? .stopped : connectionStatus, observationIssues, unowned) }
     }
 
     /// One element whenever `threads` changed, and one to begin with for what is known already. Changes that come
@@ -141,6 +145,7 @@ public final class DesktopStream: @unchecked Sendable {
             asked = [:]
             connectionStatus = .stopped
             observationIssues = [:]
+            unowned = []
             running = false
             generation += 1
             lock.broadcast()
@@ -166,6 +171,13 @@ public final class DesktopStream: @unchecked Sendable {
             guard running, generation == run, !wanted.isEmpty else { return }
             connectionStatus = status
             observationIssues = [:]
+            unowned = []
+        }
+    }
+    private func ownerFound(_ found: Bool, thread: String, run: Int) {
+        lock.withLock {
+            guard running, generation == run, wanted.contains(thread) else { return }
+            if found { unowned.remove(thread) } else { unowned.insert(thread) }
         }
     }
     private func issue(_ value: DesktopDiagnostics.Issue?, thread: String, run: Int) {
@@ -283,11 +295,13 @@ public final class DesktopStream: @unchecked Sendable {
                         // some other way says nothing about the owner.
                         if message["error"].stringValue == "no-client-found" {
                             unfollow(search.thread)
+                            ownerFound(false, thread: search.thread, run: run)
                             issue(.ownerUnavailable, thread: search.thread, run: run)
                         }
                         searchAfter[search.thread] = now + retry
                         break
                     }
+                    ownerFound(true, thread: search.thread, run: run)
                     searchAfter[search.thread] = now + Self.confirm
                     guard followed[search.thread]?.owner != owner else { break }
                     unfollow(search.thread)

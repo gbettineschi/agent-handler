@@ -10,6 +10,8 @@ public actor DesktopAdapter: ResponseTransport {
         /// Presentation only: a verified owner was observed, even if its history is unreadable.
         public let observedConversations: Set<String>
         public let sourceApprovalConversations: Set<String>
+        /// Allocation only: explicit no-owner results, not generic connection or parser failures.
+        public let unownedConversations: Set<String>
         public let diagnostics: DesktopDiagnostics
     }
     let stream: DesktopStream
@@ -61,6 +63,14 @@ public actor DesktopAdapter: ResponseTransport {
         for scope in previous.keys { _ = await controller.begin(scope: scope) }
     }
     public func activity() -> [ActivityView] { activityStore.views }
+    /// Select and apply without suspension so an already observed wait cannot
+    /// be evicted using an older UI cache or an earlier allocation snapshot.
+    /// Selection affects observation only, never request/response authority.
+    @discardableResult public func start(selecting selection: @Sendable (Health, [ActivityView]) -> Set<String>) -> Set<String> {
+        let selected = selection(health(), activityStore.views)
+        start(threadIDs: selected)
+        return wanted
+    }
     /// Presentation metadata only; not an input to request identity or response authority.
     public func conversationTitles() -> [String: String] {
         var titles: [String: String] = [:]
@@ -83,7 +93,8 @@ public actor DesktopAdapter: ResponseTransport {
         return .init(followed: wanted.count, known: known, message: message +
             (unsupportedApprovals.isEmpty ? "" : " · Approval requests need the source app"),
             needsSourceApproval: !unsupportedApprovals.isEmpty,
-            observedConversations: observedConversations, sourceApprovalConversations: unsupportedApprovals, diagnostics: diagnostics)
+            observedConversations: observedConversations, sourceApprovalConversations: unsupportedApprovals,
+            unownedConversations: streamStatus.unowned, diagnostics: diagnostics)
     }
     private func reconcile(token: UUID) async {
         guard token == generation else { return }

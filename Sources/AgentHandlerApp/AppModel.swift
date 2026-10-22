@@ -268,15 +268,22 @@ import ClaudeDesktopAdapter
                     .merging(ownerTitles, uniquingKeysWith: { _, native in native })
                 recentConversationIDs = candidates.map(\.id)
             }
-            // A parser/connection failure must not evict a previously owned
-            // active session in favor of fresh catalog history.
+            // A parser/connection failure must not evict an active session.
+            // Explicit no-owner results may release ordinary stale priority.
+            let pending = (await core.snapshot()).filter(\.needsAttention).map { $0.id.scope.conversation }
+            guard enabled, !sleeping else { return }
             let explicit = extraThreads.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.utf8.count <= 256 }
-            let selected = DiscoveryCatalog.selection(pending: requests.map { $0.id.scope.conversation }, explicit: explicit,
-                activities: activities, observed: observedCodexConversations, sourceOnly: sourceApprovalConversations, candidates: candidates.map(\.id))
-            if !catalog.retryNeeded || !selected.isEmpty {
-                lifecycle.establishBaseline(conversations: Set(selected + candidates.map(\.id)))
+            let candidateIDs = candidates.map(\.id)
+            let baseline = Set(pending + explicit + candidateIDs).union(observedCodexConversations)
+            if !catalog.retryNeeded || !baseline.isEmpty {
+                lifecycle.establishBaseline(conversations: baseline)
             }
-            await adapter.start(threadIDs: Set(selected))
+            await adapter.start(selecting: { state, currentActivities in
+                Set(DiscoveryCatalog.selection(pending: pending, explicit: explicit,
+                    activities: currentActivities, observed: state.observedConversations,
+                    sourceOnly: state.sourceApprovalConversations, candidates: candidateIDs,
+                    unowned: state.unownedConversations))
+            })
         }
         let state = await adapter.health()
         trackingWarning = catalog.warning

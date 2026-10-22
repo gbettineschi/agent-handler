@@ -4,6 +4,69 @@ import AgentHandlerCore
 @testable import CodexDesktopAdapter
 
 struct DesktopHealthTests {
+    @Test func selectionApplicationProtectsANewSourceWaitRatherThanUsingOldClearActivity() async throws {
+        let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState(questions: []))); defer { server.stop() }
+        let adapter = DesktopAdapter(directory: server.directory, controller: RequestController(ledger: MemoryLedger()))
+        await adapter.start(threadIDs: ["thread"])
+        try await eventually { await adapter.activity().first?.status == .running }
+        #expect(await adapter.health().sourceApprovalConversations.isEmpty)
+        #expect(await adapter.activity().first?.attention == .clear)
+        var fields = try #require(server.state.objectValue)
+        fields["requests"] = .array([.object(["id": .integer(42), "method": .string("mcpServer/elicitation/request"),
+            "params": .object(["threadId": .string("thread"), "turnId": .string("native-turn"),
+                "_meta": .object(["codex_approval_kind": .string("mcp_tool_call"), "connector_id": .string("another-connector")])])])])
+        server.state = .object(fields)
+        try await eventually { await adapter.health().sourceApprovalConversations == ["thread"] }
+        server.owner = nil
+        server.disconnectFollowers()
+        // Includes the real stream reconnect backoff, not just a local reduction.
+        try await eventually(timeout: .seconds(6)) { await adapter.health().unownedConversations == ["thread"] }
+        let selected = await adapter.start(selecting: { health, activities in
+            #expect(health.unownedConversations == ["thread"])
+            #expect(health.sourceApprovalConversations == ["thread"])
+            #expect(health.observedConversations == ["thread"])
+            #expect(activities.first?.status == .unknown)
+            return health.sourceApprovalConversations.isEmpty ? ["new-chat"] : ["thread"]
+        })
+        #expect(selected == ["thread"])
+        #expect(await adapter.health().sourceApprovalConversations == ["thread"])
+        #expect(server.answers.isEmpty)
+        await adapter.stop()
+    }
+    @Test func confirmedOwnerAbsenceSurvivesSearchRetryAndClearsOnRecovery() async throws {
+        let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState(questions: []))); defer { server.stop() }
+        server.owner = nil
+        let stream = DesktopStream(dataDirectory: server.directory); defer { stream.stop() }
+        stream.retry = 0.1
+        stream.follow(["thread"])
+        try await eventually { stream.diagnosticState.unowned == ["thread"] }
+        server.pauseDiscoveryResponses()
+        try await eventually { stream.diagnosticState.issues["thread"] == .awaitingOwner }
+        #expect(stream.diagnosticState.unowned == ["thread"])
+        server.owner = "recovered-owner"
+        server.resumeDiscoveryResponses()
+        try await eventually { stream.thread("thread")?.ownerClientID == "recovered-owner" }
+        #expect(stream.diagnosticState.unowned.isEmpty)
+        #expect(server.answers.isEmpty)
+    }
+
+    @Test func ownerAbsenceIsScopedToTheCurrentSelectionAndConnection() async throws {
+        let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState(questions: []))); defer { server.stop() }
+        server.owner = nil
+        let stream = DesktopStream(dataDirectory: server.directory); defer { stream.stop() }
+        stream.retry = 0.1
+        stream.follow(["thread"])
+        try await eventually { stream.diagnosticState.unowned == ["thread"] }
+        stream.follow([])
+        #expect(stream.diagnosticState.unowned.isEmpty)
+        stream.follow(["thread"])
+        try await eventually { stream.diagnosticState.unowned == ["thread"] }
+        server.stop()
+        try await eventually { stream.diagnosticState.connection != .connected && stream.diagnosticState.unowned.isEmpty }
+        stream.stop()
+        #expect(stream.diagnosticState.unowned.isEmpty)
+        #expect(server.answers.isEmpty)
+    }
     @Test func rapidlyReplacingAnEmptySelectionDoesNotLeaveAHealthyStreamStopped() async throws {
         let server = try FixtureDesktopServer(state: JSONValue.parse(fixtureState())); defer { server.stop() }
         let stream = DesktopStream(dataDirectory: server.directory); defer { stream.stop() }
@@ -35,6 +98,7 @@ struct DesktopHealthTests {
         #expect(await adapter.health().known == 0)
         #expect(await adapter.health().diagnostics.connection == .connected)
         #expect(await adapter.health().diagnostics.issues[.ownerUnavailable] == 1)
+        #expect(await adapter.health().unownedConversations == ["thread"])
         #expect(server.answers.isEmpty)
         await adapter.stop()
     }
@@ -74,6 +138,7 @@ struct DesktopHealthTests {
         try await eventually { await core.snapshot().allSatisfy { $0.state == .unavailable } }
         #expect(await adapter.health().message.contains("Refreshing Codex state"))
         #expect(await adapter.health().diagnostics.issues[.resynchronizing] == 1)
+        #expect(await adapter.health().unownedConversations.isEmpty)
         server.state = state
         try await eventually { await core.snapshot().allSatisfy { $0.state == .pending } }
         #expect(await adapter.health().message.contains("Refreshing Codex state") == false)
