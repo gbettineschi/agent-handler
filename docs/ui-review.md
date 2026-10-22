@@ -1,6 +1,6 @@
 # Menu-bar interface review
 
-The floating notch pill has been removed. A native NSStatusItem opens a bounded panel under its actual button. A hidden/offscreen Ice anchor is clamped to the display; reopening the app bundle provides a way to reach the panel before revealing the item. No hover expansion is used. Independent settings control automatic opening for blocking input, finished sessions, and non-blocking questions; only blocking input defaults to on. Automatic opening does not take keyboard focus or replace an already-open route. The selected menu-bar item stays highlighted while its panel is open.
+The floating notch pill has been removed. A native NSStatusItem opens a bounded panel centered horizontally under its visible button, with edge clamping. Invalid/hidden/offscreen Ice anchors are rejected: a fresh opening uses the top-right of the active display; an already-open panel keeps its position while resizing downward. The button's geometry selects its actual display; the full display validates the button, while the visible work area bounds the panel. A moved/removed display cannot leave the panel anchored in the middle of the screen. This follows the view-relative attachment model of Apple's [popover API](https://developer.apple.com/documentation/appkit/nspopover/show%28relativeto%3Aof%3Apreferrededge%3A%29). No hover expansion is used. Independent settings control automatic opening for blocking input, finished sessions, and non-blocking questions; only blocking input defaults to on. Automatic opening does not take keyboard focus or replace an already-open route. The selected menu-bar item stays highlighted while its panel is open.
 
 ## States and count
 
@@ -8,7 +8,9 @@ The floating notch pill has been removed. A native NSStatusItem opens a bounded 
 | --- | --- |
 | Working | Original monochrome agent glyph, subtle four-frame motion at 4 fps |
 | Question or approval | Exclamation badge; working sessions can still animate |
-| Unknown/disconnected source | Question-mark badge; never presented as success |
+| Ordinary unavailable session | Hidden immediately; observation continues |
+| Unavailable intervention | Retained request or Check Codex/Claude, attention badge |
+| Connection/catalog warning | Question-mark badge; details in Settings |
 | Failed | Cross badge and labeled failure in the list |
 | Recently finished | Check badge when no higher-priority state exists |
 | Paused | Pause badge |
@@ -24,7 +26,7 @@ The [Open Vibe Island panel](https://github.com/Octane0411/open-vibe-island/blob
 
 ## Repeatable visual checks
 
-Run `bash scripts/render-ui.sh`. Its render matrix creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Twenty-two full-panel cases and two production request-view review cases check logical dimensions; images are inspected manually. A separate native lifetime fixture briefly opens its own production panel and asserts actual visibility after controller updates, plus manual/Settings ownership. It does not interact with the installed app or any personal request. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
+Run `bash scripts/render-ui.sh`. Its render matrix creates unshown windows, uses a real controller with an in-memory synthetic transport, and never contacts an agent. Twenty-seven full-panel cases and two production request-view review cases check logical dimensions; images are inspected manually. A separate native lifetime fixture briefly opens its own production panel and asserts actual visibility after controller updates, plus manual/Settings ownership. It does not interact with the installed app or any personal request. Seven icon states and all four working frames are also rendered; see the [glyph sheet](images/ui/status-glyphs.png). This is not pixel-diff regression testing.
 
 | State | Preview |
 | --- | --- |
@@ -36,6 +38,8 @@ Run `bash scripts/render-ui.sh`. Its render matrix creates unshown windows, uses
 | Unavailable | [Image](images/ui/unavailable.png) |
 | Uncertain delivery, no resend | [Image](images/ui/uncertain.png) |
 | Sessions without requests, dismiss controls | [Image](images/ui/sessions.png) |
+| Ordinary unavailable sessions hidden | [Synthetic image](images/ui/sessions-disconnected.png) |
+| Read-only permission wait retained through disconnect | [Synthetic image](images/ui/permission-wait-disconnected.png) |
 | Narrow and long titles | [Narrow](images/ui/sessions-narrow.png), [long titles](images/ui/sessions-long-titles.png) |
 | Recent finish and Undo | [Recent finish](images/ui/sessions-recent.png), [Undo](images/ui/sessions-undo.png) |
 | Seventeen sessions and empty | [Many](images/ui/sessions-many.png), [empty](images/ui/empty.png) |
@@ -85,7 +89,7 @@ Automatic presentation preserves keyboard focus in the other app, and leaves the
 
 Automatic presentation also owns closing: resolved requests close its panel once no unresolved input remains. Uncertain, sending and unavailable requests keep it open. Claude audit waits require a positive recovery, not missing data. Finish-triggered openings retain the exact newly finished turns; only those notices and later automatic finish events extend the lifetime. Dismissal, expiry or resumed work clears each finish reason. Manual opening or Settings cancels automatic closing. Open menus defer closure while the policy continues observing new waits.
 
-Source-only Codex requests now use the same blocking notification lifetime as read-only Claude waits. Their titled session remains visible with Review in Codex and an explicit source-app notice, even beside a retained unavailable card. The vague global approval banner is removed. A verified owner without readable activity still gets an Unavailable row; missing queue data does not invent an approval. Three additional renders cover source-only input, unavailable native state and a retained card, bringing the matrix to twenty-seven layouts. The native panel fixture verifies wait → unknown → positive recovery without hiding the session early.
+Source-only Codex requests use the same blocking notification lifetime as read-only Claude waits. Their titled session remains visible with Review in Codex and an explicit source-app notice, even beside a retained unavailable card. The vague global approval banner is removed. Ordinary sessions without current activity are hidden, with monitoring and metadata retained. Unresolved typed requests stay visible. Positively observed source-only waits survive unknown data and missing turn IDs, showing Check Codex/Claude until positive recovery. These waits remain counted as intervention, without inventing response controls. Stale activity after a typed Codex response cannot become a persistent source wait. The native panel fixture verifies wait → unknown → positive recovery without hiding the wait early.
 
 The [expired fixture](images/ui/finished-expired.png) verifies that only the still-running session remains after the deadline. Settings rendering includes all three switches within the adaptive height limit.
 

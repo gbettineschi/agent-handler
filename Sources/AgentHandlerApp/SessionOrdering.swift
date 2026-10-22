@@ -24,7 +24,7 @@ struct SessionOrdering: Codable, Equatable {
         return .init(installation: String(scope.installation.dropLast(":approvals".count)), conversation: scope.conversation)
     }
     private static func needsIntervention(_ session: SessionSummary) -> Bool {
-        session.request != nil || session.status == .needsInput
+        session.hasUnresolvedInput
     }
     /// Metadata is only the initial seed. Running hints, ticks and unknown gaps never promote a row.
     mutating func observe(_ sessions: [SessionSummary], requests: [RequestView] = [], newlyFinished: [SessionSummary] = []) {

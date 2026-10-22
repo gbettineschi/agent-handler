@@ -12,6 +12,7 @@ struct SessionLifecycle: Codable {
         var finishedAt: Date?
         var expiresAt: Date?
         var dismissed = false
+        var unresolvedSourceInput: Bool? = nil
     }
     private var records: [Record] = []
     private var seenThisRun: Set<RequestScope> = []
@@ -31,7 +32,8 @@ struct SessionLifecycle: Codable {
             guard let index = records.firstIndex(where: { $0.scope == session.id }) else {
                 records.append(.init(scope: session.id, turn: session.turnID, active: active, terminalObserved: session.isFinished,
                     finishedAt: session.isFinished && newlyDiscovered ? now : nil,
-                    expiresAt: session.isFinished ? now.addingTimeInterval(Self.finishedLifetime) : nil))
+                    expiresAt: session.isFinished ? now.addingTimeInterval(Self.finishedLifetime) : nil,
+                    unresolvedSourceInput: session.hasObservedSourceWait))
                 continue
             }
             let previous = records[index]
@@ -50,6 +52,13 @@ struct SessionLifecycle: Codable {
             // Also migrates older saved records. A known finish deadline never restarts.
             if session.isFinished, record.expiresAt == nil {
                 record.expiresAt = (record.finishedAt ?? now).addingTimeInterval(Self.finishedLifetime)
+            }
+            // Only an observed source-only wait is remembered here. Typed
+            // requests already have their own authoritative controller state.
+            if session.status == .unknown {
+                record.unresolvedSourceInput = previous.unresolvedSourceInput == true || session.hasObservedSourceWait
+            } else {
+                record.unresolvedSourceInput = session.hasObservedSourceWait
             }
             if !firstThisRun, session.isFinished, record.finishedAt != nil, record.finishedAt != previous.finishedAt {
                 newlyFinished.append(session)
@@ -83,9 +92,16 @@ struct SessionLifecycle: Codable {
     }
     func visible(_ sessions: [SessionSummary], now: Date = Date()) -> [SessionSummary] {
         sessions.compactMap { session in
-            guard let record = records.first(where: { $0.scope == session.id && $0.turn == session.turnID }) else { return session }
+            // Availability is not completion. Keep observing, but do not fill
+            // the list with stale ordinary sessions. Actual input stays visible.
+            let record = records.first(where: {
+                $0.scope == session.id && ($0.turn == session.turnID || (session.status == .unknown && session.turnID == nil))
+            })
+            guard session.status != .unknown || session.hasUnresolvedInput || record?.unresolvedSourceInput == true else { return nil }
+            guard let record else { return session }
             if session.isFinished && (record.dismissed || (record.expiresAt.map { $0 <= now } ?? false)) { return nil }
             var result = session
+            if session.status == .unknown, record.unresolvedSourceInput == true { result.hasUnresolvedSourceInput = true }
             result.recentUntil = session.isFinished ? record.finishedAt?.addingTimeInterval(Self.finishedLifetime) : nil
             result.expiresAt = session.isFinished ? record.expiresAt : nil
             return result
@@ -102,9 +118,9 @@ struct MenuBarState {
     let mode: Mode
     init(sessions: [SessionSummary], now: Date, enabled: Bool = true, warning: Bool = false) {
         working = sessions.filter { $0.status == .running }.count
-        needsInput = sessions.filter { $0.status == .needsInput || $0.request != nil }.count
+        needsInput = sessions.filter(\.hasUnresolvedInput).count
         recent = sessions.filter { $0.isFinished && ($0.recentUntil.map { $0 > now } ?? false) }.count
-        count = sessions.filter { $0.status == .running || $0.status == .needsInput || $0.request != nil || ($0.isFinished && ($0.recentUntil.map { $0 > now } ?? false)) }.count
+        count = sessions.filter { $0.status == .running || $0.hasUnresolvedInput || ($0.isFinished && ($0.recentUntil.map { $0 > now } ?? false)) }.count
         if !enabled { mode = .paused }
         else if needsInput > 0 { mode = .attention }
         else if warning || sessions.contains(where: { $0.status == .unknown }) { mode = .unavailable }

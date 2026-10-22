@@ -32,6 +32,20 @@ import SwiftUI
         }
         let three = try await settle()
         let original = model.activities
+        var interrupted = ActivityStore()
+        for entry in original {
+            let epoch = interrupted.begin(scope: entry.id)
+            interrupted.observe(.init(scope: entry.id, epoch: epoch, revision: 1, turnID: entry.turnID,
+                phase: entry.phase, attention: .clear))
+            if entry.phase != .running { interrupted.invalidate(scope: entry.id, epoch: epoch) }
+        }
+        model.activities = interrupted.views; model.updateSessionPresentation()
+        let disconnected = try await settle()
+        guard model.activities.count == 3, model.sessions.count == 1, disconnected < three else { throw Failure.dimensions }
+        model.activities = original; model.updateSessionPresentation()
+        let reconnected = try await settle()
+        guard abs(reconnected - three) <= 1 else { throw Failure.dimensions }
+        print("session availability: stale rows hide and panel shrinks; fresh activity returns without a finish event")
         model.activities = Array(original.prefix(1)); model.updateSessionPresentation()
         let one = try await settle()
         model.issue = String(repeating: "A multiline warning must stay readable when inserted into a compact panel. ", count: 6)
@@ -151,6 +165,8 @@ import SwiftUI
             ("uncertain", .uncertain, 420, 480, true, false, false),
             ("sessions", .empty, 420, 400, true, false, false),
             ("sessions-narrow", .empty, 340, 400, true, false, false),
+            ("sessions-disconnected", .empty, 420, 400, true, false, false),
+            ("permission-wait-disconnected", .empty, 420, 400, true, false, false),
             ("source-only-approval", .empty, 420, 400, true, false, false),
             ("source-state-unavailable", .empty, 340, 400, true, false, false),
             ("source-only-retained", .empty, 340, 400, true, false, false),
@@ -168,6 +184,7 @@ import SwiftUI
         ]
         for (name, scenario, width, height, expanded, settings, contrast) in cases {
             await model.loadDemo(scenario)
+            model.claudeActivities = []
             model.requests = await model.core.snapshot().filter(\.needsAttention)
             if ["approval-long", "approval-browser"].contains(name), let old = model.requests.first?.request {
                 let details: ApprovalDetails
@@ -197,15 +214,40 @@ import SwiftUI
                     model.sourceApprovalConversations = ["source-example"]; model.needsSourceApproval = true
                 }
                 model.updateSessionPresentation()
-                precondition(model.sessions.count == 1 && model.sessions.first?.request == nil)
-                precondition(model.sessions.first?.title == "Review the project changes")
-                precondition(model.sessions.first?.status == (name == "source-state-unavailable" ? .unknown : .needsInput))
+                if name == "source-state-unavailable" {
+                    precondition(model.sessions.isEmpty && model.observedCodexConversations == ["source-example"])
+                } else {
+                    precondition(model.sessions.count == 1 && model.sessions.first?.request == nil)
+                    precondition(model.sessions.first?.title == "Review the project changes")
+                    precondition(model.sessions.first?.status == .needsInput)
+                }
                 if name == "source-only-retained", let scope = model.sessions.first?.id {
                     let retained = AttentionRequest(key: .init(scope: .init(installation: scope.installation + ":approvals", conversation: scope.conversation), turn: "earlier", nativeID: .integer(7)),
                         owner: "fixture", title: "Earlier native approval", content: .approval(choices: [.init(id: "accept", label: "Allow")]))
                     model.requests = [.init(request: retained, state: .unavailable)]; model.updateSessionPresentation()
                     precondition(model.sessions.count == 1 && model.sessions.first?.status == .needsInput && model.sessions.first?.needsSourceApproval == true)
                 }
+            }
+            if name == "sessions-disconnected" {
+                var activity = ActivityStore()
+                for entry in model.activities {
+                    let epoch = activity.begin(scope: entry.id)
+                    activity.observe(.init(scope: entry.id, epoch: epoch, revision: 1, turnID: entry.turnID, phase: entry.phase, attention: .clear))
+                    if entry.phase != .running { activity.invalidate(scope: entry.id, epoch: epoch) }
+                }
+                model.activities = activity.views; model.updateSessionPresentation()
+                precondition(model.activities.count == 3 && model.sessions.count == 1 && model.sessions.first?.status == .running)
+            }
+            if name == "permission-wait-disconnected" {
+                let scope = RequestScope(installation: "claude-local-audit:fixture", conversation: "claude-gap")
+                var activity = ActivityStore()
+                let epoch = activity.begin(scope: scope)
+                activity.observe(.init(scope: scope, epoch: epoch, revision: 1, turnID: "turn", phase: .running, attention: .required))
+                model.activities = []; model.claudeActivities = activity.views; model.titles[scope.conversation] = "A permission is waiting"
+                model.updateSessionPresentation()
+                activity.invalidate(scope: scope, epoch: epoch)
+                model.claudeActivities = activity.views; model.updateSessionPresentation()
+                precondition(model.sessions.count == 1 && model.sessions.first?.status == .unknown && model.menuBarState.needsInput == 1)
             }
             if name == "finished-expired" {
                 model.updateSessionPresentation(now: Date().addingTimeInterval(301))

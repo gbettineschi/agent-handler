@@ -127,10 +127,18 @@ final class AttentionPanel: NSPanel {
     }
     private func place() {
         guard presentation.expanded else { return }
-        let anchorRect = anchor.flatMap { button in button.window.map { $0.convertToScreen(button.convert(button.bounds, to: nil)) } }
-        let screen = anchor?.window?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        let anchorRect = anchor.flatMap { button -> CGRect? in
+            guard !button.isHiddenOrHasHiddenAncestor, let window = button.window, window.isVisible else { return nil }
+            return window.convertToScreen(button.convert(button.bounds, to: nil))
+        }
+        let screens = NSScreen.screens
+        let anchoredScreen = anchorRect.flatMap { rect in
+            screens.first { PanelPlacement.isUsableAnchor(rect, screen: $0.frame, visible: $0.visibleFrame) }
+        }
+        let screen = anchoredScreen ?? (panel.isVisible ? panel.screen : nil) ?? NSScreen.main ?? screens.first
         guard let screen else { return }
-        let frame = PanelPlacement.menuFrame(visible: screen.visibleFrame, anchor: anchorRect, contentHeight: contentHeight)
+        let frame = PanelPlacement.menuFrame(visible: screen.visibleFrame, anchor: anchoredScreen == nil ? nil : anchorRect,
+            contentHeight: contentHeight, screenBounds: screen.frame, previousFrame: panel.isVisible ? placedFrame : nil)
         if placedFrame != frame {
             placedFrame = frame
             let animate = panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

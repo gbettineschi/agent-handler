@@ -178,7 +178,7 @@ struct HandlerPanelView: View {
             Image(systemName: !model.enabled ? "pause.circle" : model.connectedConversations == 0 && !model.demo ? "desktopcomputer" : "tray")
                 .font(.system(size: 25, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
             Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Desktop for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Desktop" : "No sessions to show").font(.headline)
-            Text(model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Settings if it stays unavailable." : "New activity will appear automatically.")
+            Text(!model.enabled ? "Turn on Connect to Desktop in Settings to resume." : model.connectedConversations == 0 && !model.demo ? "Open a local Work conversation to connect. Check Settings if it stays unavailable." : "New activity will appear automatically.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }.padding(20).frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
     }

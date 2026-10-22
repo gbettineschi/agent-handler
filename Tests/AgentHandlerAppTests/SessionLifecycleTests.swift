@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import AgentHandlerCore
+@testable import AgentHandlerCore
 @testable import AgentHandlerApp
 
 struct SessionLifecycleTests {
@@ -36,8 +36,8 @@ struct SessionLifecycleTests {
         lifecycle.dismiss(row(.completed))
         var reopened = try JSONDecoder().decode(SessionLifecycle.self, from: JSONEncoder().encode(lifecycle))
         #expect(reopened.visible([row(.completed)], now: now).isEmpty)
-        // A lost connection is never silently hidden as a completed session.
-        #expect(reopened.visible([row(.unknown)], now: now).count == 1)
+        // A lost ordinary session stays hidden, without claiming it completed.
+        #expect(reopened.visible([row(.unknown)], now: now).isEmpty)
         reopened.observe([row(.running)], now: now)
         #expect(reopened.visible([row(.running)], now: now).count == 1)
         #expect(MenuBarState(sessions: reopened.visible([row(.running)], now: now), now: now).mode == .working)
@@ -156,7 +156,7 @@ struct SessionLifecycleTests {
         #expect(reopened.visible([row(.completed)], now: now.addingTimeInterval(400)).isEmpty)
         reopened.observe([row(.running)], now: now.addingTimeInterval(401))
         #expect(reopened.visible([row(.running)], now: now.addingTimeInterval(400)).count == 1)
-        #expect(reopened.visible([row(.unknown)], now: now.addingTimeInterval(400)).count == 1)
+        #expect(reopened.visible([row(.unknown)], now: now.addingTimeInterval(400)).isEmpty)
     }
 
     @Test(arguments: [ActivityStatus.completed, .failed, .cancelled])
@@ -207,6 +207,107 @@ struct SessionLifecycleTests {
         var migrated = try JSONDecoder().decode(SessionLifecycle.self, from: JSONSerialization.data(withJSONObject: object))
         migrated.observe([row(.completed)], now: now.addingTimeInterval(400))
         #expect(migrated.visible([row(.completed)], now: now.addingTimeInterval(400)).isEmpty)
+    }
+
+    @Test func unavailableOrdinarySessionsDisappearAndRecoverWithoutAFinishEvent() {
+        let now = Date(timeIntervalSince1970: 1000)
+        var lifecycle = SessionLifecycle()
+        lifecycle.observe([row(.running)], now: now)
+        let lost = lifecycle.observe([row(.unknown)], now: now.addingTimeInterval(1))
+        #expect(lost.isEmpty)
+        #expect(lifecycle.visible([row(.unknown)], now: now.addingTimeInterval(1)).isEmpty)
+        #expect(lifecycle.hidden([row(.unknown)], now: now.addingTimeInterval(1)).isEmpty)
+        let recovered = lifecycle.observe([row(.running)], now: now.addingTimeInterval(2))
+        #expect(recovered.isEmpty)
+        #expect(lifecycle.visible([row(.running)], now: now.addingTimeInterval(2)).count == 1)
+    }
+
+    @Test func unreadableInitialOwnerMetadataDoesNotCreateAVisibleInactiveSession() {
+        let sessions = SessionSummary.rows(activities: [], requests: [], titles: ["thread": "Actual title"], recentIDs: [], observedScopes: [scope])
+        var lifecycle = SessionLifecycle()
+        lifecycle.observe(sessions, now: Date())
+        #expect(lifecycle.visible(sessions).isEmpty)
+        #expect(sessions.first?.title == "Actual title") // Metadata and tracking are retained.
+    }
+
+    @Test func unresolvedRequestsRemainVisibleWhenTheConnectionIsUnavailable() {
+        let request = AttentionRequest(key: .init(scope: scope, turn: "a", nativeID: .string("q")), owner: "owner",
+            title: "Pending question", content: .question(options: [], allowsText: true))
+        for state in [RequestState.unavailable, .uncertain, .rejected, .sending] {
+            var lifecycle = SessionLifecycle()
+            let sessions = SessionSummary.rows(activities: [], requests: [.init(request: request, state: state)], titles: [:], recentIDs: [])
+            lifecycle.observe(sessions, now: Date())
+            #expect(lifecycle.visible(sessions).first?.request?.state == state)
+        }
+    }
+
+    @Test func readOnlyPermissionWaitStaysVisibleThroughAConnectionGap() {
+        let source = RequestScope(installation: "claude-local-audit:fixture", conversation: "claude")
+        var activity = ActivityStore(), lifecycle = SessionLifecycle()
+        let epoch = activity.begin(scope: source)
+        activity.observe(.init(scope: source, epoch: epoch, revision: 1, turnID: "turn", phase: .running, attention: .required))
+        let waiting = SessionSummary.rows(activities: activity.views, requests: [], titles: [:], recentIDs: [])
+        lifecycle.observe(waiting, now: Date())
+        activity.invalidate(scope: source, epoch: epoch)
+        let unavailable = SessionSummary.rows(activities: activity.views, requests: [], titles: [:], recentIDs: [])
+        lifecycle.observe(unavailable, now: Date())
+        #expect(lifecycle.visible(unavailable).count == 1)
+        #expect(lifecycle.visible(unavailable).first?.status == .unknown)
+        #expect(lifecycle.visible(unavailable).first?.request == nil)
+        #expect(MenuBarState(sessions: lifecycle.visible(unavailable), now: Date()).needsInput == 1)
+    }
+
+    @Test func sourceOnlyWaitSurvivesUnknownMetadataAndRestartUntilPositiveRecovery() throws {
+        let now = Date(timeIntervalSince1970: 1000)
+        var lifecycle = SessionLifecycle()
+        let waiting = SessionSummary(id: scope, title: "Native approval", status: .needsInput, request: nil, turnID: "a", needsSourceApproval: true)
+        lifecycle.observe([waiting], now: now)
+        let unknown = SessionSummary(id: scope, title: "Native approval", status: .unknown, request: nil)
+        lifecycle.observe([unknown], now: now.addingTimeInterval(1))
+        #expect(lifecycle.visible([unknown], now: now).count == 1)
+        var reopened = try JSONDecoder().decode(SessionLifecycle.self, from: JSONEncoder().encode(lifecycle))
+        reopened.observe([unknown], now: now.addingTimeInterval(500))
+        #expect(reopened.visible([unknown], now: now.addingTimeInterval(500)).count == 1)
+        #expect(MenuBarState(sessions: reopened.visible([unknown], now: now), now: now).needsInput == 1)
+        reopened.observe([row(.running)], now: now.addingTimeInterval(501))
+        reopened.observe([row(.unknown)], now: now.addingTimeInterval(502))
+        #expect(reopened.visible([row(.unknown)], now: now.addingTimeInterval(502)).isEmpty)
+    }
+
+    @Test func aWithdrawnTypedRequestDoesNotBecomeAPermanentReadOnlyWait() {
+        let now = Date(timeIntervalSince1970: 1000)
+        let request = AttentionRequest(key: .init(scope: scope, turn: "a", nativeID: .string("q")), owner: "owner",
+            title: "Question", content: .question(options: [], allowsText: true))
+        let pending = SessionSummary(id: scope, title: "Chat", status: .needsInput, request: .init(request: request, state: .pending), turnID: "a")
+        var lifecycle = SessionLifecycle()
+        lifecycle.observe([pending], now: now)
+        // Typed closure belongs to the controller. No source-only wait was observed.
+        lifecycle.observe([row(.unknown)], now: now.addingTimeInterval(1))
+        #expect(lifecycle.visible([row(.unknown)], now: now.addingTimeInterval(1)).isEmpty)
+    }
+
+    @Test(arguments: [false, true]) func acceptedTypedRequestCannotTurnItsOldActivityIntoASourceOnlyWait(observeBeforeGap: Bool) async throws {
+        let now = Date(timeIntervalSince1970: 1000)
+        let request = AttentionRequest(key: .init(scope: scope, turn: "a", nativeID: .string("q")), owner: "owner",
+            title: "Question", content: .question(options: [], allowsText: true))
+        let core = RequestController(ledger: MemoryLedger())
+        let epoch = await core.begin(scope: scope)
+        await core.observe(.init(scope: scope, epoch: epoch, revision: 1, requests: [request]))
+        var activity = ActivityStore(), lifecycle = SessionLifecycle()
+        let source = activity.begin(scope: scope)
+        activity.observe(.init(scope: scope, epoch: source, revision: 1, turnID: "a", phase: .running, attention: .required))
+        let pending = SessionSummary.rows(activities: activity.views, requests: await core.snapshot().filter(\.needsAttention), titles: [:], recentIDs: [])
+        lifecycle.observe(pending, now: now)
+        try await core.respond(key: request.key, fingerprint: request.fingerprint, answer: .text("Synthetic answer"), using: DemoTransport(outcome: .accepted))
+        let remaining = await core.snapshot().filter(\.needsAttention)
+        #expect(remaining.isEmpty)
+        if observeBeforeGap {
+            lifecycle.observe(SessionSummary.rows(activities: activity.views, requests: remaining, titles: [:], recentIDs: []), now: now.addingTimeInterval(1))
+        }
+        activity.invalidate(scope: scope, epoch: source)
+        let stale = SessionSummary.rows(activities: activity.views, requests: remaining, titles: [:], recentIDs: [])
+        lifecycle.observe(stale, now: now.addingTimeInterval(2))
+        #expect(lifecycle.visible(stale, now: now.addingTimeInterval(2)).isEmpty)
     }
 
 }

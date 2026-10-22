@@ -88,7 +88,7 @@ private struct SessionRow: View {
         case .completed: return "Completed"
         case .failed: return "Failed"
         case .cancelled: return "Cancelled"
-        case .unknown: return "Unavailable"
+        case .unknown: return session.hasUnresolvedSourceInput ? "Check \(session.sourceLabel)" : "Unavailable"
         }
     }
     private var symbol: String {
@@ -99,7 +99,7 @@ private struct SessionRow: View {
         case .completed: return "checkmark.circle"
         case .failed: return "exclamationmark.triangle"
         case .cancelled: return "xmark.circle"
-        case .unknown: return "questionmark.circle"
+        case .unknown: return session.hasUnresolvedSourceInput ? "exclamationmark.bubble" : "questionmark.circle"
         }
     }
     private var tint: Color {
@@ -109,7 +109,8 @@ private struct SessionRow: View {
         case .needsInput: return .orange
         case .completed: return .green
         case .failed: return .red
-        case .cancelled, .unknown: return .secondary
+        case .cancelled: return .secondary
+        case .unknown: return session.hasUnresolvedSourceInput ? .orange : .secondary
         }
     }
 }

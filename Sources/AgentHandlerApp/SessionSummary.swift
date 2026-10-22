@@ -12,6 +12,12 @@ struct SessionSummary: Identifiable {
     var activityDetail: ActivityDetail? = nil
     var humanInputID: String? = nil
     var needsSourceApproval = false
+    /// A positively observed native wait survives an observation gap. Presentation only.
+    var hasUnresolvedSourceInput = false
+    var hasObservedSourceWait: Bool {
+        needsSourceApproval || hasUnresolvedSourceInput || (isClaude && status == .needsInput && request == nil)
+    }
+    var hasUnresolvedInput: Bool { request != nil || hasObservedSourceWait || status == .needsInput }
     var sourceLabel: String { isClaude ? "Claude" : "Codex" }
     var isFinished: Bool { [.completed, .failed, .cancelled].contains(status) && request == nil }
     var isClaude: Bool { id.installation.hasPrefix("claude-local-audit:") }
@@ -38,7 +44,8 @@ struct SessionSummary: Identifiable {
                         status: status, request: request, turnID: activityByID[scope]?.turnID ?? request?.id.turn,
                         activityDetail: status == .running ? activityByID[scope]?.detail : nil,
                         humanInputID: activityByID[scope]?.isCurrent == true ? activityByID[scope]?.humanInputID : nil,
-                        needsSourceApproval: sourceApproval)
+                        needsSourceApproval: sourceApproval,
+                        hasUnresolvedSourceInput: scope.installation.hasPrefix("claude-local-audit:") && request == nil && activityByID[scope]?.attention == .required)
         }.sorted {
             let lhs = order[$0.id.conversation] ?? Int.max, rhs = order[$1.id.conversation] ?? Int.max
             return lhs == rhs ? ($0.id.installation, $0.id.conversation) < ($1.id.installation, $1.id.conversation) : lhs < rhs
