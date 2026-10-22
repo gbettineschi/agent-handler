@@ -261,6 +261,20 @@ import SwiftUI
             else { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(150)) }
             guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw Failure.render }
             host.cacheDisplay(in: host.bounds, to: bitmap)
+            // The compact indicators must leave the camera band when content
+            // is expanded. Sample the actual rendered view, not its properties.
+            if expanded {
+                let scale = CGFloat(bitmap.pixelsHigh) / host.bounds.height
+                for y in Int(6 * scale)..<Int(32 * scale) {
+                    for x in Int(24 * scale)..<(bitmap.pixelsWide - Int(24 * scale)) {
+                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                              max(color.redComponent, color.greenComponent, color.blueComponent) < 0.04 else {
+                            print("Expanded notch still has compact content in its camera band: \(name)")
+                            throw Failure.render
+                        }
+                    }
+                }
+            }
             guard let data = bitmap.representation(using: .png, properties: [:]) else { throw Failure.render }
             try data.write(to: output.appendingPathComponent(name + ".png"))
             print("\(name): \(bitmap.pixelsWide)×\(bitmap.pixelsHigh)")

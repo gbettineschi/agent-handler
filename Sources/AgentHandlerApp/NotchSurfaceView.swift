@@ -15,7 +15,7 @@ struct CompanionSurfaceView: View {
         VStack(spacing: 0) {
             if presentation.style == .notch {
                 NotchStatusStrip(state: model.menuBarState, cameraWidth: presentation.cameraWidth,
-                    height: presentation.stripHeight, activate: open)
+                    height: presentation.stripHeight, expanded: presentation.expanded, activate: open)
                     .contextMenu {
                         Button("Open Agent Handler", action: open)
                         Button("Settings…", action: settings)
@@ -39,28 +39,33 @@ struct NotchStatusStrip: View {
     let state: MenuBarState
     let cameraWidth: CGFloat
     let height: CGFloat
+    let expanded: Bool
     let activate: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: activate) {
             HStack(spacing: 0) {
-                TimelineView(.animation(minimumInterval: 0.25, paused: !state.shouldAnimate(reduceMotion: reduceMotion))) { context in
-                    let frame = state.shouldAnimate(reduceMotion: reduceMotion)
+                TimelineView(.animation(minimumInterval: 0.25, paused: expanded || !state.shouldAnimate(reduceMotion: reduceMotion))) { context in
+                    let frame = !expanded && state.shouldAnimate(reduceMotion: reduceMotion)
                         ? Int(context.date.timeIntervalSinceReferenceDate * 4) % 4 : 0
                     Image(nsImage: AgentStatusIcon.image(mode: state.mode, frame: frame))
                         .renderingMode(.template).foregroundStyle(tint)
                         .frame(width: 22, height: 18)
-                }.frame(width: 48)
+                }.frame(width: 48).opacity(expanded ? 0 : 1)
                 Color.clear.frame(width: cameraWidth, height: 1).accessibilityHidden(true)
                 Text("\(state.working)").font(.system(size: 12, weight: .semibold)).monospacedDigit()
                     .foregroundStyle(state.working > 0 ? .white : .white.opacity(0.5))
                     .frame(width: 48)
+                    .opacity(expanded ? 0 : 1)
             }.frame(maxWidth: .infinity).frame(height: height)
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
+            // Only the compact content fades. AppKit remains the sole owner
+            // of window size; the camera clearance and click surface stay put.
+            .animation(reduceMotion ? nil : .easeOut(duration: expanded ? 0.10 : 0.16), value: expanded)
             .accessibilityLabel("Agent Handler. \(state.working) running. \(state.needsInput) need input.")
-            .help("\(state.working) running · \(state.needsInput) need input. Hover to expand; click to keep open.")
+            .help(expanded ? "Click to keep open." : "\(state.working) running · \(state.needsInput) need input. Hover to expand; click to keep open.")
     }
     private var tint: Color {
         switch state.mode {
