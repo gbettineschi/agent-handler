@@ -12,6 +12,11 @@ struct HandlerPanelView: View {
 
     private var expanded: Bool { presentation.expanded }
     private var current: RequestView? { model.displayedRequest }
+    private struct LayoutPass: Equatable {
+        let revision: UInt64
+        let expanded: Bool
+        let heights: [PanelHeightRegion: CGFloat]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,9 +66,13 @@ struct HandlerPanelView: View {
                 }
             }
         }
-        .onPreferenceChange(PanelContentHeights.self) { heights in
-            guard expanded, heights[.content] != nil else { return }
-            contentHeightChanged(heights.values.reduce(heights[.actions] == nil ? 1 : 2, +))
+        .overlayPreferenceValue(PanelContentHeights.self) { heights in
+            let pass = LayoutPass(revision: presentation.layoutRevision, expanded: expanded, heights: heights)
+            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+                .task(id: pass) {
+                    guard pass.expanded, pass.heights[.content] != nil else { return }
+                    contentHeightChanged(pass.heights.values.reduce(pass.heights[.actions] == nil ? 1 : 2, +))
+                }
         }
         .font(.system(size: 13))
         .padding(.horizontal, presentation.style == .notch ? 8 : 0)

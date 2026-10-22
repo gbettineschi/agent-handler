@@ -31,6 +31,7 @@ final class AttentionPanel: NSPanel {
     private var contentHeight: CGFloat = 260
     private var resizeTask: Task<Void, Never>?
     private var placedFrame: CGRect?
+    private var awaitingNotchLayout = false
     private enum Opening { case hover, manual, automatic }
     private var opening: Opening?
     private var hoverPolicy = NotchHoverPolicy()
@@ -90,6 +91,7 @@ final class AttentionPanel: NSPanel {
         else { show() }
     }
     private func collapse(automatically: Bool = false) {
+        awaitingNotchLayout = false
         hoverTask?.cancel(); hoverTask = nil; hoverPolicy = NotchHoverPolicy(); opening = nil
         // Only a pointer remaining over the compact trigger must leave before
         // reopening. A normal hover-exit must allow the very next re-entry.
@@ -132,6 +134,7 @@ final class AttentionPanel: NSPanel {
     private func present(takingFocus: Bool) {
         hoverTask?.cancel(); hoverTask = nil
         let wasVisible = panel.isVisible
+        if presentation.style == .notch, !presentation.expanded { prepareNotchLayout() }
         presentation.expanded = true
         place()
         panel.contentView?.window?.recalculateKeyViewLoop()
@@ -167,15 +170,23 @@ final class AttentionPanel: NSPanel {
         // Coalesce preference updates into one resize after SwiftUI finishes layout.
         resizeTask = Task { @MainActor [weak self] in
             await Task.yield()
-            guard !Task.isCancelled, let self, abs(self.contentHeight - height) >= 1 else { return }
+            guard !Task.isCancelled, let self,
+                  self.awaitingNotchLayout || abs(self.contentHeight - height) >= 1 else { return }
             self.contentHeight = height
+            self.awaitingNotchLayout = false
             self.place()
         }
     }
     private func place() {
         if presentation.style == .notch, let geometry {
+            guard !awaitingNotchLayout else { return }
             panel.hasShadow = presentation.expanded
-            applyFrame(presentation.expanded ? geometry.expandedFrame(contentHeight: contentHeight) : geometry.collapsedFrame)
+            let frame = presentation.expanded ? geometry.expandedFrame(contentHeight: contentHeight) : geometry.collapsedFrame
+            if presentation.expanded {
+                let viewport = CGSize(width: frame.width, height: frame.height - geometry.stripHeight)
+                if presentation.contentViewport != viewport { presentation.contentViewport = viewport }
+            }
+            applyFrame(frame)
             return
         }
         guard presentation.expanded else { return }
@@ -206,6 +217,18 @@ final class AttentionPanel: NSPanel {
             }
         }
     }
+    private func prepareNotchLayout() {
+        guard let geometry else { return }
+        // Lay out the route at its final width and maximum available height.
+        // Its natural-height preference starts the reveal with one target frame.
+        let frame = geometry.expandedFrame(contentHeight: .greatestFiniteMagnitude)
+        resizeTask?.cancel(); resizeTask = nil
+        awaitingNotchLayout = true
+        presentation.contentViewport = CGSize(width: frame.width, height: frame.height - geometry.stripHeight)
+        // A rapid close/reopen may be coalesced into the same SwiftUI tree.
+        // Ask for a new layout receipt even if the natural height is unchanged.
+        presentation.layoutRevision &+= 1
+    }
     private func synchronizeStyle() {
         if let geometryProvider { geometry = geometryProvider() }
         else {
@@ -222,6 +245,8 @@ final class AttentionPanel: NSPanel {
         }
         guard style != presentation.style else { return }
         hoverTask?.cancel(); hoverTask = nil; hoverPolicy = NotchHoverPolicy()
+        awaitingNotchLayout = false
+        if style == .notch, presentation.expanded { prepareNotchLayout() }
         presentation.style = style
         placedFrame = nil
         place()
@@ -268,6 +293,8 @@ final class AttentionPanel: NSPanel {
     @Published var style: CompanionStyle = .menuBar
     @Published var cameraWidth: CGFloat = 203
     @Published var stripHeight: CGFloat = 39
+    @Published var contentViewport = CGSize(width: 520, height: 640)
+    @Published var layoutRevision: UInt64 = 0
 }
 
 @MainActor private final class HoverHostingView<Content: View>: NSHostingView<Content> {

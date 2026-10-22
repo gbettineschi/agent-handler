@@ -25,9 +25,17 @@ struct CompanionSurfaceView: View {
             }
             HandlerPanelView(model: model, presentation: presentation, collapse: collapse,
                 contentHeightChanged: contentHeightChanged)
+                // The window reveals a settled canvas. Resizing the ScrollView
+                // itself at every animation frame causes reflow and scrollers.
+                .frame(width: presentation.style == .notch ? presentation.contentViewport.width : nil,
+                    height: presentation.style == .notch ? presentation.contentViewport.height : nil,
+                    alignment: .top)
                 .frame(height: presentation.style == .notch && !presentation.expanded ? 0 : nil)
                 .clipped()
         }
+        .frame(width: presentation.style == .notch ? presentation.contentViewport.width : nil,
+            height: presentation.style == .notch ? presentation.stripHeight + (presentation.expanded ? presentation.contentViewport.height : 0) : nil,
+            alignment: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(presentation.style == .notch ? Color.black : Color.clear)
         .clipShape(CompanionOutline(style: presentation.style, expanded: presentation.expanded))

@@ -73,7 +73,8 @@ import SwiftUI
     /// Native scrollbars can change text width once when a viewport stops
     /// overflowing. Require two stable layouts, and reject persistent feedback.
     @MainActor private static func settleHeight<V: View>(window: NSWindow, host: NSHostingView<V>,
-                                                       width: CGFloat, extraHeight: CGFloat = 0, measured: () -> CGFloat) async throws -> CGFloat {
+                                                       width: CGFloat, extraHeight: CGFloat = 0,
+                                                       sizeChanged: (CGSize) -> Void = { _ in }, measured: () -> CGFloat) async throws -> CGFloat {
         var history: [CGFloat] = []
         var stable = 0
         for _ in 0..<6 {
@@ -83,6 +84,7 @@ import SwiftUI
             guard natural > 0, natural.isFinite else { throw Failure.dimensions }
             let target = PanelPlacement.menuFrame(visible: CGRect(x: 0, y: 0, width: 1200, height: 1000),
                                                   anchor: nil, contentHeight: natural).height + extraHeight
+            sizeChanged(CGSize(width: width, height: target))
             let alreadyFits = abs(host.bounds.height - target) <= 1
             if alreadyFits, let previous = history.last, abs(previous - natural) <= 1 { stable += 1 }
             else { stable = 0 }
@@ -231,6 +233,97 @@ import SwiftUI
         try check(panel.effectiveStyle == .menuBar && panel.isExpanded, "menu-bar return")
         print("notch lifecycle: dwell opens without focus; leave folds and re-entry opens; explicit collapse suppresses reopen; uncertain/automatic waits stay; resolution folds; Settings and display fallback preserve route")
     }
+    /// Observe the real scroll viewport during expansion, not just its settled
+    /// size. A short list must fit throughout the reveal, without a scroller.
+    @MainActor private static func verifyNotchExpansionLayout(model: AppModel) async throws {
+        await model.loadDemo(.empty)
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        model.showSettings = false; model.showSessions = true; model.companionStyle = .notch
+        model.updateSessionPresentation()
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        guard let geometry = NotchGeometry.resolve(screen: screen, visible: screen.insetBy(dx: 0, dy: 40), safeTop: 38,
+            left: CGRect(x: 0, y: 944, width: 660, height: 38),
+            right: CGRect(x: 852, y: 944, width: 660, height: 38)) else { throw Failure.dimensions }
+        var available = true
+        let panel = MenuBarPanel(model: model, notchGeometry: { available ? geometry : nil }, pointerLocation: { .zero })
+        model.attentionChanged = { panel.refresh() }
+        defer { model.attentionChanged = nil; panel.shutdown(); model.companionStyle = .menuBar }
+        panel.refresh()
+        guard let window = NSApp.windows.first(where: { $0.title == "Agent Handler" && $0.isVisible }),
+              let host = window.contentView else { throw Failure.render }
+        func scrollViews(_ view: NSView) -> [NSScrollView] {
+            (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
+        }
+        var samples: [String] = []
+        var viewportWidths: [CGFloat] = []
+        var overflow = false
+        panel.show()
+        for index in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            for scroll in scrollViews(host) {
+                guard let document = scroll.documentView, document.bounds.height > 0 else { continue }
+                let viewport = scroll.contentView.bounds.size
+                viewportWidths.append(viewport.width)
+                if window.frame.height > geometry.stripHeight + 4 && document.bounds.height > viewport.height + 1 {
+                    overflow = true
+                }
+                if index < 14 || index == 39 {
+                    samples.append("\(index): window \(Int(window.frame.width))×\(Int(window.frame.height)), viewport \(Int(viewport.width))×\(Int(viewport.height)), document \(Int(document.bounds.width))×\(Int(document.bounds.height))")
+                }
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        print("notch expansion samples: \(samples.joined(separator: "; "))")
+        guard !samples.isEmpty, !overflow, let minWidth = viewportWidths.min(), let maxWidth = viewportWidths.max(),
+              maxWidth - minWidth < 1, window.frame.width == 520,
+              window.frame.height > geometry.stripHeight + 100 else {
+            print("Short sessions overflow while the notch expands")
+            throw Failure.dimensions
+        }
+        print("notch expansion: short sessions fit during every sampled frame")
+
+        let shortActivities = model.activities
+        var many = ActivityStore()
+        for index in 0..<20 {
+            let scope = RequestScope(installation: "demo", conversation: "animation-list-\(index)")
+            let epoch = many.begin(scope: scope)
+            many.observe(.init(scope: scope, epoch: epoch, revision: 1, turnID: "synthetic-turn", phase: .running, attention: .clear))
+            model.titles[scope.conversation] = "Synthetic session \(index + 1)"
+        }
+        model.activities = many.views; model.updateSessionPresentation()
+        try await Task.sleep(for: .milliseconds(450))
+        host.layoutSubtreeIfNeeded()
+        guard let longScroll = scrollViews(host).first(where: { scroll in
+            guard let document = scroll.documentView else { return false }
+            return scroll.contentView.bounds.height > 100 && document.bounds.height > scroll.contentView.bounds.height + 100
+        }) else { throw Failure.dimensions }
+        longScroll.contentView.scroll(to: CGPoint(x: 0, y: 100))
+        longScroll.reflectScrolledClipView(longScroll.contentView)
+        guard longScroll.contentView.bounds.minY > 0 else { throw Failure.dimensions }
+        model.activities = shortActivities; model.updateSessionPresentation()
+        try await Task.sleep(for: .milliseconds(450))
+        host.layoutSubtreeIfNeeded()
+        guard scrollViews(host).allSatisfy({ ($0.documentView?.bounds.height ?? 0) <= $0.contentView.bounds.height + 1 && $0.contentView.bounds.minY <= 1 }) else { throw Failure.dimensions }
+        print("notch content updates: long lists retain a scroll viewport; short lists return to a fitting viewport")
+        window.performClose(nil); panel.show()
+        try await Task.sleep(for: .milliseconds(450))
+        guard panel.isExpanded, window.frame.width == 520, window.frame.height > geometry.stripHeight + 100 else {
+            print("Immediate close/reopen did not reveal its unchanged content: \(window.frame)")
+            throw Failure.dimensions
+        }
+        print("notch rapid reopen: unchanged natural height still starts the reveal")
+        available = false; panel.refresh()
+        available = true; panel.refresh()
+        try await Task.sleep(for: .milliseconds(450))
+        guard panel.effectiveStyle == .notch, panel.isExpanded, window.frame.width == 520,
+              window.frame.height > geometry.stripHeight + 100 else { throw Failure.dimensions }
+        print("notch rapid display recovery: unchanged content is measured and revealed")
+        window.performClose(nil)
+        panel.show(); window.performClose(nil)
+        try await Task.sleep(for: .milliseconds(450))
+        guard !panel.isExpanded, window.frame == geometry.collapsedFrame else { throw Failure.dimensions }
+        print("notch cancelled opening: late layout cannot reopen a dismissed panel")
+    }
     @MainActor private static func renderNotchVariants(model: AppModel, output: URL) async throws {
         for (name, scenario, expanded, settings) in [
             ("notch-collapsed", DemoScenario.empty, false, false),
@@ -257,7 +350,13 @@ import SwiftUI
                 styleMask: [.borderless], backing: .buffered, defer: false)
             window.isOpaque = false; window.backgroundColor = .clear
             window.isReleasedWhenClosed = false; window.contentView = host
-            if expanded { _ = try await settleHeight(window: window, host: host, width: width, extraHeight: 39, measured: { measured }) }
+            if expanded {
+                _ = try await settleHeight(window: window, host: host, width: width, extraHeight: 39,
+                    sizeChanged: { size in
+                        let viewport = CGSize(width: size.width, height: size.height - 39)
+                        if presentation.contentViewport != viewport { presentation.contentViewport = viewport }
+                    }, measured: { measured })
+            }
             else { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(150)) }
             guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw Failure.render }
             host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -288,6 +387,10 @@ import SwiftUI
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let model = try AppModel(demo: true)
         model.companionStyle = .menuBar
+        if CommandLine.arguments.contains("--notch-animation-only") {
+            try await verifyNotchExpansionLayout(model: model)
+            return
+        }
         if CommandLine.arguments.contains("--notch-interaction-only") {
             try await verifyNotchInteraction(model: model)
             return
@@ -473,6 +576,7 @@ import SwiftUI
         try await verifyAdaptiveTransitions(model: model)
         try await renderNotchVariants(model: model, output: output)
         try await verifyNotchInteraction(model: model)
+        try await verifyNotchExpansionLayout(model: model)
         for long in [false, true] {
             await model.loadDemo(.approval)
             guard let original = await model.core.snapshot().first(where: { $0.id == model.selectedRequestID })?.request else { throw Failure.render }
