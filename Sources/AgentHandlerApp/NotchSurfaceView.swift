@@ -12,33 +12,37 @@ struct CompanionSurfaceView: View {
     var contentHeightChanged: (CGFloat) -> Void = { _ in }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if presentation.style == .notch {
-                NotchStatusStrip(state: model.menuBarState, cameraWidth: presentation.cameraWidth,
-                    height: presentation.stripHeight, expanded: presentation.expanded, activate: open)
-                    .contextMenu {
-                        Button("Open Agent Handler", action: open)
-                        Button("Settings…", action: settings)
-                        Divider()
-                        Button("Quit Agent Handler") { NSApp.terminate(nil) }
-                    }
+        GeometryReader { viewport in
+            VStack(spacing: 0) {
+                if presentation.style == .notch {
+                    NotchStatusStrip(state: model.menuBarState, cameraWidth: presentation.cameraWidth,
+                        height: presentation.stripHeight, expanded: presentation.expanded, activate: open)
+                        .contextMenu {
+                            Button("Open Agent Handler", action: open)
+                            Button("Settings…", action: settings)
+                            Divider()
+                            Button("Quit Agent Handler") { NSApp.terminate(nil) }
+                        }
+                }
+                HandlerPanelView(model: model, presentation: presentation, collapse: collapse,
+                    contentHeightChanged: contentHeightChanged)
+                    // The window reveals a settled canvas. Resizing the ScrollView
+                    // itself at every animation frame causes reflow and scrollers.
+                    .frame(width: presentation.style == .notch ? presentation.contentViewport.width : nil,
+                        height: presentation.style == .notch ? presentation.contentViewport.height : nil,
+                        alignment: .top)
+                    .frame(height: presentation.style == .notch && !presentation.expanded ? 0 : nil)
+                    .clipped()
             }
-            HandlerPanelView(model: model, presentation: presentation, collapse: collapse,
-                contentHeightChanged: contentHeightChanged)
-                // The window reveals a settled canvas. Resizing the ScrollView
-                // itself at every animation frame causes reflow and scrollers.
-                .frame(width: presentation.style == .notch ? presentation.contentViewport.width : nil,
-                    height: presentation.style == .notch ? presentation.contentViewport.height : nil,
-                    alignment: .top)
-                .frame(height: presentation.style == .notch && !presentation.expanded ? 0 : nil)
-                .clipped()
+            .frame(width: presentation.style == .notch ? presentation.contentViewport.width : nil,
+                height: presentation.style == .notch ? presentation.stripHeight + (presentation.expanded ? presentation.contentViewport.height : 0) : nil,
+                alignment: .top)
+            // A flexible frame can grow to the canvas's minimum width. The
+            // outline must instead clip to the actual animated window bounds.
+            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
+            .background(presentation.style == .notch ? Color.black : Color.clear)
+            .clipShape(CompanionOutline(style: presentation.style, expanded: presentation.expanded))
         }
-        .frame(width: presentation.style == .notch ? presentation.contentViewport.width : nil,
-            height: presentation.style == .notch ? presentation.stripHeight + (presentation.expanded ? presentation.contentViewport.height : 0) : nil,
-            alignment: .top)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(presentation.style == .notch ? Color.black : Color.clear)
-        .clipShape(CompanionOutline(style: presentation.style, expanded: presentation.expanded))
         .environment(\.colorScheme, .dark)
     }
 }
@@ -86,7 +90,7 @@ struct NotchStatusStrip: View {
     }
 }
 
-/// Attached shoulders, square against the screen edge, with a continuous black
+/// Attached shoulders, flush with the screen edge, with a continuous black
 /// body below the camera. Unlike a floating capsule, there is no top gap.
 struct CompanionOutline: Shape {
     let style: CompanionStyle

@@ -360,10 +360,24 @@ import SwiftUI
             else { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(150)) }
             guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw Failure.render }
             host.cacheDisplay(in: host.bounds, to: bitmap)
+            let scale = CGFloat(bitmap.pixelsHigh) / host.bounds.height
+            let shoulder: CGFloat = expanded ? 12 : 6
+            func alpha(_ x: CGFloat, _ y: CGFloat) -> CGFloat {
+                bitmap.colorAt(x: Int(x * scale), y: Int(y * scale))?.alphaComponent ?? .nan
+            }
+            // The mask belongs to the real window viewport, not the wider
+            // fixed content canvas. A side pixel is filled but its curved
+            // bottom corner must be transparent in both presentations.
+            guard alpha(shoulder + 1, host.bounds.height / 2) > 0.95,
+                  alpha(shoulder + 1, host.bounds.height - 2) < 0.05,
+                  alpha(host.bounds.width - shoulder - 2, host.bounds.height - 2) < 0.05,
+                  alpha(host.bounds.width / 2, host.bounds.height - 2) > 0.95 else {
+                print("Notch corners are clipped square: \(name)")
+                throw Failure.render
+            }
             // The compact indicators must leave the camera band when content
             // is expanded. Sample the actual rendered view, not its properties.
             if expanded {
-                let scale = CGFloat(bitmap.pixelsHigh) / host.bounds.height
                 for y in Int(6 * scale)..<Int(32 * scale) {
                     for x in Int(24 * scale)..<(bitmap.pixelsWide - Int(24 * scale)) {
                         guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
@@ -387,6 +401,10 @@ import SwiftUI
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let model = try AppModel(demo: true)
         model.companionStyle = .menuBar
+        if CommandLine.arguments.contains("--notch-surface-only") {
+            try await renderNotchVariants(model: model, output: output)
+            return
+        }
         if CommandLine.arguments.contains("--notch-animation-only") {
             try await verifyNotchExpansionLayout(model: model)
             return

@@ -65,7 +65,8 @@ struct NotchTests {
         #expect(policy.update(inside: true, expanded: false, mayCollapse: false, now: 0) == nil)
         #expect(policy.update(inside: false, expanded: false, mayCollapse: false, now: 0.05) == nil)
         #expect(policy.update(inside: true, expanded: false, mayCollapse: false, now: 1) == nil)
-        #expect(policy.update(inside: true, expanded: false, mayCollapse: false, now: 1.2) == .expand)
+        #expect(policy.update(inside: true, expanded: false, mayCollapse: false, now: 1.09) == nil)
+        #expect(policy.update(inside: true, expanded: false, mayCollapse: false, now: 1.101) == .expand)
     }
     @Test func hoverExitHasGraceAndReentryCancelsCollapse() {
         var policy = NotchHoverPolicy()

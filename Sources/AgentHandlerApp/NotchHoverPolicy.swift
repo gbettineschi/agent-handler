@@ -16,7 +16,7 @@ struct NotchHoverPolicy {
             closing = nil
             guard !expanded, !suppressedUntilExit else { opening = nil; return nil }
             if let opening, now >= opening { self.opening = nil; return .expand }
-            if opening == nil { opening = now + 0.14 }
+            if opening == nil { opening = now + 0.10 }
         } else {
             suppressedUntilExit = false; opening = nil
             guard expanded, mayCollapse else { closing = nil; return nil }
