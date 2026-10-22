@@ -60,15 +60,21 @@ import Combine
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { panel?.show(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     private func refreshStatus() {
-        guard let model, let button = item?.button else { return }
+        guard let model, let item else { return }
+        panel?.refresh()
+        let visible = panel?.effectiveStyle != .notch
+        if item.isVisible != visible {
+            item.isVisible = visible
+            Task { @MainActor [weak self] in self?.panel?.refresh() }
+        }
+        guard let button = item.button else { return }
         let state = model.menuBarState
         button.title = " \(state.count)"
         button.image = AgentStatusIcon.image(mode: state.mode, frame: frame)
         button.toolTip = state.description + " Click to open; Control-click for commands."
         button.setAccessibilityLabel(state.description)
         button.setAccessibilityIdentifier("agent-handler-status")
-        panel?.refresh()
-        let moving = state.shouldAnimate(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        let moving = visible && state.shouldAnimate(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         if moving, animation == nil {
             animation = Task { [weak self] in
                 while !Task.isCancelled {
@@ -93,4 +99,5 @@ import Combine
     @objc private func settings() { panel?.showSettings() }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func screenChanged() { panel?.refresh() }
+    func applicationWillTerminate(_ notification: Notification) { animation?.cancel(); panel?.shutdown() }
 }

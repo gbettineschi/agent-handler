@@ -1,6 +1,6 @@
 # Compatibility
 
-This is a development milestone, not universal agent interception. The current local suite passes 227 test functions across 31 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md). The [remaining acceptance checks](verification.md#acceptance-still-required) distinguish missing native evidence from implemented fixture-tested behavior.
+This is a development milestone, not universal agent interception. The current local suite passes 244 test functions across 32 suites; dated native acceptance and CI evidence are recorded in [verification.md](verification.md). The [remaining acceptance checks](verification.md#acceptance-still-required) distinguish missing native evidence from implemented fixture-tested behavior.
 
 | Surface | Implemented | Evidence through 2026-10-21 |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ This is a development milestone, not universal agent interception. The current l
 | File diffs, network/additional permission grants, arbitrary forms and Claude approvals | Not implemented | Continue in the source app. |
 | Codex CLI, public app-server, Claude hooks, MCP elicitation | Not implemented | Separate future adapters, each needing an ownership and response contract. |
 | Menu-bar interface | Native status icon, session count and adaptive AppKit/SwiftUI panel | Live source titles/activity, keyboard question submission, ×/Undo, settings growth/shrink and Ice reveal/click passed. Permission actions have no default Return shortcut. Twenty-nine production-view fixtures pass, including source-only/unreadable sessions, retained cards, narrow/long approvals and fixed saved-rule review controls. The redesigned live review/Back interaction and multiple displays remain separate checks; VoiceOver was explicitly removed from scope. |
+| Optional notch presentation | Shared native panel/controller; camera-safe wings, hover expansion and running count | Thirty-five layouts include six notch states. Native fixture checks dwell/exit/re-entry, pinning, animated shrink boundaries, automatic/uncertain lifetime and display fallback. On the actual notched Mac, Menu bar ↔ Notch preserved a real unsent draft, focused Escape folded, one click reopened and strip activation kept it open. One answer submitted through the notch arrived and withdrew the card; a transient uncertain state does not establish a clean idle receipt. Physical display removal and sleep/wake remain unverified. |
 | Restart and uncertain delivery | Durable ledger and generation fencing | Fresh native pending-question recovery and an answer through the restarted app passed again. Controlled EOF/reconnect, stop-before-write, SQLite reopen and crash checks pass. Definite non-delivery can recover only with fresh state; uncertain sends stay blocked. Source-host restart, native uncertain-send restart and real sleep/wake remain pending. |
 
 ## Tested host

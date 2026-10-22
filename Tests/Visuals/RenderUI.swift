@@ -73,7 +73,7 @@ import SwiftUI
     /// Native scrollbars can change text width once when a viewport stops
     /// overflowing. Require two stable layouts, and reject persistent feedback.
     @MainActor private static func settleHeight<V: View>(window: NSWindow, host: NSHostingView<V>,
-                                                       width: CGFloat, measured: () -> CGFloat) async throws -> CGFloat {
+                                                       width: CGFloat, extraHeight: CGFloat = 0, measured: () -> CGFloat) async throws -> CGFloat {
         var history: [CGFloat] = []
         var stable = 0
         for _ in 0..<6 {
@@ -82,7 +82,7 @@ import SwiftUI
             let natural = measured()
             guard natural > 0, natural.isFinite else { throw Failure.dimensions }
             let target = PanelPlacement.menuFrame(visible: CGRect(x: 0, y: 0, width: 1200, height: 1000),
-                                                  anchor: nil, contentHeight: natural).height
+                                                  anchor: nil, contentHeight: natural).height + extraHeight
             let alreadyFits = abs(host.bounds.height - target) <= 1
             if alreadyFits, let previous = history.last, abs(previous - natural) <= 1 { stable += 1 }
             else { stable = 0 }
@@ -96,10 +96,12 @@ import SwiftUI
     /// A native panel owned by this fixture process, with the real controller
     /// and synthetic transport. No source app or personal request is touched.
     @MainActor private static func verifyAutomaticClosing(model: AppModel) async throws {
+        model.companionStyle = .menuBar
         await model.loadDemo(.approval)
         model.requests = await model.core.snapshot().filter(\.needsAttention)
         guard let request = model.requests.first?.request else { throw Failure.render }
         let panel = MenuBarPanel(model: model)
+        defer { panel.shutdown() }
         var visibility: [Bool] = []
         panel.visibilityChanged = { visibility.append($0) }
         model.attentionChanged = { panel.refresh() }
@@ -148,11 +150,134 @@ import SwiftUI
         guard !window.isVisible else { throw Failure.dimensions }
         print("source-only panel lifetime: native wait stays visible; unknown data retains its row; positive recovery hides")
     }
+    /// Same production NSPanel and pointer handler. The fake geometry/position
+    /// belong only to this process; no cursor movement or source-app input.
+    @MainActor private static func verifyNotchInteraction(model: AppModel) async throws {
+        await model.loadDemo(.questions)
+        model.requests = await model.core.snapshot().filter(\.needsAttention)
+        model.companionStyle = .notch
+        let screen = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let safe: CGFloat = 38
+        guard let geometry = NotchGeometry.resolve(screen: screen, visible: screen.insetBy(dx: 0, dy: 40), safeTop: safe,
+            left: CGRect(x: screen.minX, y: screen.maxY - safe, width: screen.width / 2 - 96, height: safe),
+            right: CGRect(x: screen.midX + 96, y: screen.maxY - safe, width: screen.width / 2 - 96, height: safe)) else { throw Failure.dimensions }
+        var available = true
+        var pointer = CGPoint(x: screen.minX + 10, y: screen.minY + 10)
+        let panel = MenuBarPanel(model: model, notchGeometry: { available ? geometry : nil }, pointerLocation: { pointer })
+        model.attentionChanged = { panel.refresh() }
+        defer { model.attentionChanged = nil; panel.shutdown(); model.companionStyle = .menuBar }
+        panel.refresh()
+        guard let window = NSApplication.shared.windows.first(where: { $0.title == "Agent Handler" && $0.isVisible }) else {
+            print("Notch fixture has no visible panel"); throw Failure.dimensions
+        }
+        func check(_ condition: Bool, _ step: String) throws {
+            guard condition else {
+                print("Notch fixture failed at \(step): expanded=\(panel.isExpanded) visible=\(window.isVisible) key=\(window.isKeyWindow) frame=\(window.frame)")
+                throw Failure.dimensions
+            }
+        }
+        try check(panel.effectiveStyle == .notch && !panel.isExpanded && window.frame == geometry.collapsedFrame, "initial collapsed placement")
+        pointer = CGPoint(x: geometry.collapsedFrame.minX + 24, y: geometry.collapsedFrame.midY)
+        panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(panel.isExpanded && window.isVisible && !window.isKeyWindow, "hover without focus")
+        pointer = CGPoint(x: screen.minX + 10, y: screen.minY + 10)
+        panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(600))
+        try check(!panel.isExpanded && window.isVisible && abs(window.frame.height - geometry.stripHeight) < 1, "leave folds")
+
+        pointer = CGPoint(x: geometry.collapsedFrame.minX + 24, y: geometry.collapsedFrame.midY)
+        panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(panel.isExpanded, "second hover")
+        panel.show()
+        pointer = CGPoint(x: screen.minX + 10, y: screen.minY + 10); panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(panel.isExpanded, "explicit pin survives leave")
+        pointer = CGPoint(x: geometry.notch.midX, y: geometry.collapsedFrame.minY - 2)
+        window.performClose(nil); panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(!panel.isExpanded, "shrinking body is not a new hover trigger")
+        panel.show()
+        try await Task.sleep(for: .milliseconds(250))
+        pointer = CGPoint(x: geometry.collapsedFrame.minX + 24, y: geometry.collapsedFrame.midY)
+        window.performClose(nil)
+        panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(!panel.isExpanded && window.isVisible, "explicit collapse suppresses reopen")
+        pointer = CGPoint(x: screen.minX + 10, y: screen.minY + 10)
+        panel.pointerChanged()
+        guard let request = model.requests.first?.request else { throw Failure.render }
+        panel.showAutomatically(for: .request(request.key))
+        panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(panel.isExpanded && !window.isKeyWindow, "automatic opening")
+        try await model.core.respond(key: request.key, fingerprint: request.fingerprint, answer: .text("Synthetic notch check"), using: DemoTransport(outcome: .uncertain))
+        model.requests = await model.core.snapshot().filter(\.needsAttention); model.updateSessionPresentation()
+        try check(panel.isExpanded && model.requests.contains(where: { $0.state == .uncertain }), "uncertain retention")
+        let epoch = await model.core.begin(scope: request.key.scope)
+        await model.core.observe(.init(scope: request.key.scope, epoch: epoch, revision: 1, requests: []))
+        model.requests = await model.core.snapshot().filter(\.needsAttention); model.updateSessionPresentation()
+        try check(!panel.isExpanded && window.isVisible, "resolved folds")
+
+        panel.showSettings(); pointer = CGPoint(x: screen.minX + 10, y: screen.minY + 10); panel.pointerChanged()
+        try await Task.sleep(for: .milliseconds(450))
+        try check(panel.isExpanded && model.showSettings, "Settings ownership")
+        available = false; panel.refresh()
+        try check(panel.effectiveStyle == .menuBar && model.companionStyle == .notch && panel.isExpanded && model.showSettings, "display fallback")
+        available = true; panel.refresh()
+        try check(panel.effectiveStyle == .notch && panel.isExpanded && model.showSettings, "display recovery")
+        model.companionStyle = .menuBar; panel.refresh()
+        try check(panel.effectiveStyle == .menuBar && panel.isExpanded, "menu-bar return")
+        print("notch lifecycle: dwell opens without focus; leave folds and re-entry opens; explicit collapse suppresses reopen; uncertain/automatic waits stay; resolution folds; Settings and display fallback preserve route")
+    }
+    @MainActor private static func renderNotchVariants(model: AppModel, output: URL) async throws {
+        for (name, scenario, expanded, settings) in [
+            ("notch-collapsed", DemoScenario.empty, false, false),
+            ("notch-sessions", .empty, true, false),
+            ("notch-question", .questions, true, false),
+            ("notch-approval", .approval, true, false),
+            ("notch-settings", .empty, true, true),
+            ("notch-long", .longContent, true, false)
+        ] {
+            await model.loadDemo(scenario)
+            model.requests = await model.core.snapshot().filter(\.needsAttention)
+            model.showSessions = scenario == .empty; model.showSettings = settings
+            model.companionStyle = .notch; model.notchAvailable = true
+            model.updateSessionPresentation()
+            let presentation = PanelPresentation()
+            presentation.style = .notch; presentation.expanded = expanded
+            presentation.cameraWidth = 203; presentation.stripHeight = 39
+            var measured: CGFloat = 0
+            let host = NSHostingView(rootView: CompanionSurfaceView(model: model, presentation: presentation,
+                open: {}, settings: {}, collapse: {}, contentHeightChanged: { measured = $0 }))
+            host.sizingOptions = []
+            let width: CGFloat = expanded ? 520 : 299
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: width, height: expanded ? 400 : 39),
+                styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isOpaque = false; window.backgroundColor = .clear
+            window.isReleasedWhenClosed = false; window.contentView = host
+            if expanded { _ = try await settleHeight(window: window, host: host, width: width, extraHeight: 39, measured: { measured }) }
+            else { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(150)) }
+            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw Failure.render }
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            guard let data = bitmap.representation(using: .png, properties: [:]) else { throw Failure.render }
+            try data.write(to: output.appendingPathComponent(name + ".png"))
+            print("\(name): \(bitmap.pixelsWide)×\(bitmap.pixelsHigh)")
+            window.close()
+        }
+        model.companionStyle = .menuBar; model.showSettings = false
+    }
     @MainActor private static func render() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let output = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? ".build/ui-snapshots", isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let model = try AppModel(demo: true)
+        model.companionStyle = .menuBar
+        if CommandLine.arguments.contains("--notch-interaction-only") {
+            try await verifyNotchInteraction(model: model)
+            return
+        }
         let cases: [(String, DemoScenario, CGFloat, CGFloat, Bool, Bool, Bool)] = [
             ("question", .questions, 420, 400, true, false, false),
             ("approval", .approval, 420, 480, true, false, false),
@@ -332,6 +457,8 @@ import SwiftUI
             print("\(name): \(bitmap.pixelsWide)×\(bitmap.pixelsHigh)")
         }
         try await verifyAdaptiveTransitions(model: model)
+        try await renderNotchVariants(model: model, output: output)
+        try await verifyNotchInteraction(model: model)
         for long in [false, true] {
             await model.loadDemo(.approval)
             guard let original = await model.core.snapshot().first(where: { $0.id == model.selectedRequestID })?.request else { throw Failure.render }

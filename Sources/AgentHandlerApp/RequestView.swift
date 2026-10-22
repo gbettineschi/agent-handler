@@ -15,7 +15,9 @@ struct HandlerPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header.panelMeasuredHeight(.header)
+            if expanded || presentation.style == .menuBar {
+                header.panelMeasuredHeight(.header)
+            }
             if expanded {
                 Divider()
                 if let issue = model.issue {
@@ -64,13 +66,14 @@ struct HandlerPanelView: View {
             contentHeightChanged(heights.values.reduce(heights[.actions] == nil ? 1 : 2, +))
         }
         .font(.system(size: 13))
+        .padding(.horizontal, presentation.style == .notch ? 8 : 0)
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(presentation.style == .notch ? Color.black : Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: presentation.style == .notch ? 0 : 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(contrast == .increased ? 0.55 : 0.16), lineWidth: 1)
+                .strokeBorder(.white.opacity(presentation.style == .notch ? 0 : contrast == .increased ? 0.55 : 0.16), lineWidth: 1)
                 .allowsHitTesting(false)
         }
         .environment(\.colorScheme, .dark)
@@ -87,9 +90,11 @@ struct HandlerPanelView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(nsImage: AgentStatusIcon.image(mode: model.menuBarState.mode))
-                .frame(width: 16, height: 16).help("Agent Handler status")
-                .accessibilityHidden(true)
+            if presentation.style == .menuBar {
+                Image(nsImage: AgentStatusIcon.image(mode: model.menuBarState.mode))
+                    .frame(width: 16, height: 16).help("Agent Handler status")
+                    .accessibilityHidden(true)
+            }
             if model.showSettings {
                 Text("Settings").font(.system(size: 13, weight: .semibold)).accessibilityAddTraits(.isHeader)
             } else {
@@ -130,10 +135,12 @@ struct HandlerPanelView: View {
                 PanelIconButton(title: model.showSettings ? (model.showSessions ? "Back to sessions" : "Back to question") : "Settings", symbol: model.showSettings ? "arrow.left" : "gearshape") {
                     model.showSettings.toggle()
                 }.keyboardShortcut(",", modifiers: .command)
-                PanelIconButton(title: "Close panel (Escape)", symbol: "xmark", action: collapse)
+                PanelIconButton(title: presentation.style == .notch ? "Collapse notch (Escape)" : "Close panel (Escape)",
+                    symbol: presentation.style == .notch ? "chevron.up" : "xmark", action: collapse)
                     .keyboardShortcut(.cancelAction)
             }
-        }.padding(.horizontal, expanded ? 16 : 12).frame(height: expanded ? 46 : 30)
+        }.padding(.horizontal, expanded ? 16 : 12)
+            .frame(height: presentation.style == .notch ? 40 : expanded ? 46 : 30)
     }
 
     private func usageLabel(_ usage: UsageHeader, compact: Bool) -> some View {

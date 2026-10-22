@@ -1,6 +1,6 @@
 # Agent Handler
 
-A small native macOS companion for agent questions, built around an independent request controller and a compact menu-bar interface.
+A small native macOS companion for agent questions, built around an independent request controller and a choice of menu-bar or notch presentation.
 
 **Development build.** Native Codex/ChatGPT Work questions, live shell Allow/Cancel, app Allow/Deny and browser-origin Allow/Deny through Agent Handler have passed, including automatic opening for blocking approvals. Work turn activity is tracked; regular ChatGPT Chat is deferred. A read-only Claude local-audit observer is implemented and fixture-tested, but a fresh native Claude turn remains unverified and Claude response delivery is not implemented. Cloud-only Claude chats without local audits are unsupported. The Desktop adapter uses private IPC and can require maintenance after host updates. See the [coverage audit](docs/surface-audit.md) and [verification record](docs/verification.md).
 
@@ -16,13 +16,15 @@ scripts/bundle.sh
 open "dist/Agent Handler.app" --args --demo
 ```
 
-Quit the demo from the **Agent Handler menu-bar icon** before starting the live connection:
+Quit the demo from the **Agent Handler menu-bar icon**, or the notch's context menu, before starting the live connection:
 
 ```sh
 open "dist/Agent Handler.app"
 ```
 
-The app starts with a native **menu-bar agent icon** and no floating pill. Click the icon to open its panel; Control-click or right-click for commands. Escape, × or an outside click closes the panel. Questions support Command-Return to send; permissions require an explicit button action. The panel fits its current content automatically, growing down from the menu-bar item. Height is capped at 640 points or the available display space; longer content scrolls. Temporary conversation-catalog read failures preserve existing subscriptions and retry automatically. Settings has independent automatic-opening switches for blocking input (on by default), finished sessions (off), and non-blocking questions (off). Automatic opening keeps keyboard focus in your current app and leaves an already-open panel alone. Reopening the app bundle also opens its panel, which is useful while Ice hides its menu-bar item.
+The app defaults to a native **menu-bar agent icon**. Settings → Appearance switches between **Menu bar** and **Notch**, without replacing the request view or its drafts. Click the menu-bar icon to open its panel; Control-click or right-click for commands. Escape closes the focused panel, and × or an outside click also closes it. Questions support Command-Return to send; permissions require an explicit button action. The panel fits its current content automatically, growing down from the menu-bar item. Height is capped at 640 points or the available display space; longer content scrolls. Temporary conversation-catalog read failures preserve existing subscriptions and retry automatically. Settings has independent automatic-opening switches for blocking input (on by default), finished sessions (off), and non-blocking questions (off). Automatic opening keeps keyboard focus in your current app and leaves an already-open panel alone. Reopening the app bundle also opens its panel, which is useful while Ice hides its menu-bar item.
+
+**Notch mode** attaches one black surface directly to the built-in camera cutout, using Apple's real safe-area geometry. The colored agent sits on the left; the running-session count sits on the right. Hover briefly to expand the entire surface downward; moving away folds a passive preview. Click to keep it open, use the chevron or Escape after focusing it to fold, or click outside. Editing, Settings and unresolved automatically opened interventions retain their existing lifetimes. No global keyboard monitor or additional permission is needed. The menu-bar icon is hidden in this mode. If the notched display disappears, the menu-bar interface returns until it is available again; the selected preference is preserved. Reduce Motion disables motion. See the [presentation review](docs/ui-review.md).
 
 An automatically opened panel closes when its input is resolved, including any other unresolved requests that arrived meanwhile. Sending, uncertain delivery and unavailable source state do not count as resolution. A finish notice stays until its specific notified turns expire, are dismissed or resume; unrelated older finishes do not prolong it. Manual opening and Settings keep the panel open. Menu tracking delays closing without discarding incoming state.
 
@@ -38,7 +40,7 @@ The live adapter observes at most 16 recent local conversations, prioritizing al
 
 Ordinary sessions disappear from the list immediately when their current activity becomes unavailable; observation continues and fresh activity brings them back. They are not declared completed. Actual unresolved questions/approvals stay visible, as do positively observed source-only permission waits through unknown gaps. These retained waits use Check Codex/Claude without gaining invented response controls. Requests that cannot be handled here show Review in Codex on that chat, with its title; they do not expire as finished sessions. Blocking auto-opening covers source-only requests, and an unknown gap does not count as resolution. Image attachments do not disable native question tracking; their bytes are not interpreted as questions or answers.
 
-The panel opens directly below its visible menu-bar button, horizontally centered when space permits and clamped inside the display edges. Hidden/offscreen Ice positions are rejected. If the button cannot be located, a fresh opening uses the top-right of the active display. An already-open panel keeps its top and horizontal position when Ice hides the button; content changes resize downward. The full display locates the button, while the available work area bounds the panel, including displays with a side Dock.
+In Menu bar mode, the panel opens directly below its visible button, horizontally centered when space permits and clamped inside the display edges. Hidden/offscreen Ice positions are rejected. If the button cannot be located, a fresh opening uses the top-right of the active display. An already-open panel keeps its top and horizontal position when Ice hides the button; content changes resize downward. The full display locates the button, while the available work area bounds the panel, including displays with a side Dock.
 
 ## Core guarantees and limits
 

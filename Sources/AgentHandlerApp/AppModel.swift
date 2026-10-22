@@ -21,6 +21,10 @@ import ClaudeDesktopAdapter
     @Published var observedCodexConversations: Set<String> = []
     @Published var sourceApprovalConversations: Set<String> = []
     @Published var trackingWarning: String?
+    @Published var companionStyle: CompanionStyle {
+        didSet { if !demo { companionStyle.save(to: .standard) } }
+    }
+    @Published var notchAvailable = false
     @Published var issue: String?
     @Published var showSettings = false
     @Published var selectedRequestID: RequestKey?
@@ -131,6 +135,7 @@ import ClaudeDesktopAdapter
 
     init(demo: Bool) throws {
         self.demo = demo
+        companionStyle = CompanionStyle.load(from: .standard)
         let storage = demo
             ? FileManager.default.temporaryDirectory.appendingPathComponent("agent-handler-demo-\(getuid())")
             : FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/AgentHandler")
