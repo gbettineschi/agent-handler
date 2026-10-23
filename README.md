@@ -4,9 +4,11 @@
 
 A small macOS app that keeps an eye on your agents while you do something else.
 
-See which Codex sessions are running, answer questions and handle supported approvals from the menu bar or notch. The panel can open when something needs you, then get out of the way. Finished sessions clear after five minutes.
+See which Codex sessions are running, answer questions and handle supported approvals from the menu bar or notch. The panel can open when something needs you, then get out of the way. 
 
-**The app is fully vibe-coded and built for my own use** when a Codex update in autumn 2026 made unreliable all the existing similar apps. The app and repository are provided as is, without warranty or promised support.
+It can be used as a standard menu bar app or from the notch.
+
+**The app is fully vibe-coded and built for my own use.** I built it when a Codex update in autumn 2026 made unreliable all the existing similar apps. The app and repository are provided as is, without warranty or promised support.
 
 <img src="docs/images/ui/notch-sessions.png" width="520" alt="Agent Handler notch panel showing example sessions">
 
