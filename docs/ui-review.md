@@ -76,6 +76,10 @@ Command-comma opens Settings. With macOS Keyboard Navigation temporarily enabled
 
 ## Detail polish
 
+Tracking now starts automatically whenever the live app runs. The former Connect to Desktop switch and its persisted pause gate have been removed. The header keeps separate controls: chevron to hide, Settings/Back, and × to quit the application. Escape and outside clicks still hide without quitting or discarding the in-memory answer draft.
+
+Notch hover also observes native mouse movement in both local and global event scopes, as described in [Apple's event-monitor documentation](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/MonitoringEvents/MonitoringEvents.html). The panel explicitly accepts mouse-moved events. Movement only updates dwell on a change of inside/outside state; it adds no idle polling. The cache is invalidated when collapse changes the hit region. A missing view-entry event therefore has a geometric recovery path, while compact-frame suppression and passive focus behavior remain intact.
+
 Chat titles take the full row width, with a compact source/status line underneath. Actionable rows have restrained hover/press feedback; focus has a single outline. Event-based ordering remains stable between interventions and finishes. Settings text is shorter, empty state avoids implying that an unknown job succeeded, the Open command always opens, and an already visible panel does not repeat its fade.
 
 Hide has a ten-second Undo available only on the sessions route, so Command-Z cannot capture answer-field editing. The restore menu recovers individual hidden finished rows after that offer expires. Both use exact source/turn identity and preserve the original finish deadline. A real hidden Job tracker row was restored through this menu while the other pre-existing hidden session was left hidden. Native list-row inspection alone does not establish that the × hit target was exercised successfully; the later content-height pass below exercised × and Undo.

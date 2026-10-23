@@ -36,6 +36,7 @@ final class AttentionPanel: NSPanel {
     private var opening: Opening?
     private var hoverPolicy = NotchHoverPolicy()
     private var hoverTask: Task<Void, Never>?
+    private var lastPointerInside: Bool?
     private var geometry: NotchGeometry?
     private let geometryProvider: (() -> NotchGeometry?)?
     private let pointerLocation: () -> CGPoint
@@ -53,6 +54,7 @@ final class AttentionPanel: NSPanel {
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.level = .statusBar; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
+        panel.acceptsMouseMovedEvents = true
         panel.title = "Agent Handler"
         NotificationCenter.default.addObserver(self, selector: #selector(menuBegan), name: NSMenu.didBeginTrackingNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(menuEnded), name: NSMenu.didEndTrackingNotification, object: nil)
@@ -72,14 +74,18 @@ final class AttentionPanel: NSPanel {
         // otherwise make a scrollable error state expand the window itself.
         host.sizingOptions = []
         panel.contentView = host
-        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
+        // Recover an absent view-entry event using pointer geometry. Both
+        // event scopes are needed for movement in our window and other apps.
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .mouseMoved], handler: { [weak self] event in
             MainActor.assumeIsolated {
+                if event.type == .mouseMoved { self?.pointerMoved(); return }
                 guard let self, event.windowNumber != self.panel.windowNumber else { return }
                 self.dismissIfOutside(event)
             }
         }) { eventMonitors.append(monitor) }
-        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .mouseMoved], handler: { [weak self] event in
             MainActor.assumeIsolated {
+                if event.type == .mouseMoved { self?.pointerMoved(); return }
                 guard let self, event.window !== self.panel, event.window !== self.anchor?.window else { return }
                 self.dismissIfOutside(event)
             }
@@ -93,6 +99,8 @@ final class AttentionPanel: NSPanel {
     private func collapse(automatically: Bool = false) {
         awaitingNotchLayout = false
         hoverTask?.cancel(); hoverTask = nil; hoverPolicy = NotchHoverPolicy(); opening = nil
+        // The hit region changes from the expanded body to the compact strip.
+        lastPointerInside = nil
         // Only a pointer remaining over the compact trigger must leave before
         // reopening. A normal hover-exit must allow the very next re-entry.
         if geometry?.collapsedFrame.contains(pointerLocation()) == true { hoverPolicy.dismissed() }
@@ -245,6 +253,7 @@ final class AttentionPanel: NSPanel {
         }
         guard style != presentation.style else { return }
         hoverTask?.cancel(); hoverTask = nil; hoverPolicy = NotchHoverPolicy()
+        lastPointerInside = nil
         awaitingNotchLayout = false
         if style == .notch, presentation.expanded { prepareNotchLayout() }
         presentation.style = style
@@ -253,17 +262,28 @@ final class AttentionPanel: NSPanel {
         if style == .notch || presentation.expanded { panel.orderFrontRegardless() }
         else { panel.resignKey(); panel.orderOut(nil) }
     }
+    private var pointerIsInside: Bool {
+        // During the shrink the native frame is still larger than the trigger.
+        // That vanishing body must not start a fresh dwell and reopen itself.
+        let trigger = presentation.expanded ? panel.frame : geometry?.collapsedFrame ?? panel.frame
+        return trigger.contains(pointerLocation())
+    }
+    private func pointerMoved() {
+        guard presentation.style == .notch, panel.isVisible, pointerIsInside != lastPointerInside else { return }
+        // High-rate movement within the same region does not reschedule dwell
+        // tasks. The deadline rechecks the current position even after a stop.
+        pointerChanged()
+    }
     /// Shared native-event path; fixture tests provide only their own pointer
     /// position and geometry, without moving the user's cursor.
     func pointerChanged() {
         hoverTask?.cancel(); hoverTask = nil
         guard presentation.style == .notch, panel.isVisible else { return }
+        let inside = pointerIsInside
+        lastPointerInside = inside
         let mayCollapse = opening == .hover && !panel.isKeyWindow && !model.showSettings && !menuTracking
         let now = ProcessInfo.processInfo.systemUptime
-        // During the shrink the native frame is still larger than the trigger.
-        // That vanishing body must not start a fresh dwell and reopen itself.
-        let trigger = presentation.expanded ? panel.frame : geometry?.collapsedFrame ?? panel.frame
-        switch hoverPolicy.update(inside: trigger.contains(pointerLocation()), expanded: presentation.expanded,
+        switch hoverPolicy.update(inside: inside, expanded: presentation.expanded,
                                   mayCollapse: mayCollapse, now: now) {
         case .expand:
             opening = .hover; autoClose.openedManually(); present(takingFocus: false)

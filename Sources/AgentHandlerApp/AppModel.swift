@@ -48,7 +48,7 @@ import ClaudeDesktopAdapter
     var hiddenSessions: [SessionSummary] { ordering.sorted(lifecycle.hidden(observedSessions, now: sessionClock)) }
     var sessions: [SessionSummary] { ordering.sorted(lifecycle.visible(observedSessions, now: sessionClock)) }
     var menuBarState: MenuBarState {
-        MenuBarState(sessions: sessions, now: sessionClock, enabled: enabled,
+        MenuBarState(sessions: sessions, now: sessionClock,
                      warning: issue != nil || trackingWarning != nil || needsSourceApproval)
     }
     func updateSessionPresentation(now: Date = Date()) {
@@ -63,7 +63,7 @@ import ClaudeDesktopAdapter
         persistLifecycle()
         attentionChanged?()
         if let target = autoOpenPolicy.update(requests: requests, sessions: observed, newlyFinished: newlyFinished,
-                                              settings: autoOpenSettings, enabled: enabled && !sleeping && !demo) {
+                                              settings: autoOpenSettings, enabled: !sleeping && !demo) {
             autoOpenRequested?(target)
         }
     }
@@ -104,7 +104,6 @@ import ClaudeDesktopAdapter
         }
     }
     var displayedRequest: RequestView? { requests.first { $0.id == selectedRequestID } ?? SessionSummary.preferredRequest(requests) }
-    @Published var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: "desktopEnabled"); Task { await reconfigure() } } }
     @Published var extraThreads: String { didSet { UserDefaults.standard.set(extraThreads, forKey: "extraThreads"); lastDiscovery = 0 } }
     @Published var loginEnabled = SMAppService.mainApp.status == .enabled
     @Published var autoOpenSettings = AutoOpenSettings() {
@@ -149,7 +148,6 @@ import ClaudeDesktopAdapter
         }
         core = RequestController(ledger: ledger)
         adapter = DesktopAdapter(directory: directory, controller: core)
-        enabled = UserDefaults.standard.object(forKey: "desktopEnabled") as? Bool ?? true
         extraThreads = UserDefaults.standard.string(forKey: "extraThreads") ?? ""
         if !demo { autoOpenSettings = AutoOpenSettings.load(from: .standard) }
     }
@@ -166,7 +164,7 @@ import ClaudeDesktopAdapter
         presentationTimer = Task { [weak self] in
             while !Task.isCancelled {
                 if let self {
-                    if !demo, enabled, !sleeping { activities = await adapter.activity() }
+                    if !demo, !sleeping { activities = await adapter.activity() }
                     updateSessionPresentation()
                 }
                 try? await Task.sleep(for: .seconds(1))
@@ -195,7 +193,7 @@ import ClaudeDesktopAdapter
         observingClaude = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if enabled, !sleeping {
+                if !sleeping {
                     let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.anthropic.claudefordesktop").first
                     let source = app.map { "\($0.processIdentifier):\($0.launchDate?.timeIntervalSince1970 ?? 0)" }
                     await claude.poll(sourceInstance: source)
@@ -220,18 +218,8 @@ import ClaudeDesktopAdapter
         })
     }
 
-    private func reconfigure() async {
-        guard !demo else { return }
-        refreshingUsage?.cancel(); refreshingUsage = nil; codexUsage = nil
-        if enabled, !sleeping { startUsageRefresh() }
-        await adapter.stop(); await claude.stop()
-        activities = await adapter.activity(); claudeActivities = await claude.activity(); lastDiscovery = 0
-        connectedConversations = 0; connectionChecked = false
-        needsSourceApproval = false
-        await refreshDiscovery()
-    }
     private func startUsageRefresh() {
-        guard !demo, enabled, !sleeping, refreshingUsage == nil else { return }
+        guard !demo, !sleeping, refreshingUsage == nil else { return }
         refreshingUsage = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -240,7 +228,7 @@ import ClaudeDesktopAdapter
                 let reading: CodexUsageSnapshot?
                 if let executable { reading = try? await CodexUsageReader.read(executable: executable, directory: directory) }
                 else { reading = nil }
-                guard !Task.isCancelled, enabled, !sleeping else { return }
+                guard !Task.isCancelled, !sleeping else { return }
                 codexUsage = reading
                 try? await Task.sleep(for: .seconds(60))
             }
@@ -248,7 +236,6 @@ import ClaudeDesktopAdapter
     }
     private func refreshDiscovery() async {
         guard !demo, !sleeping, !refreshingDiscovery else { return }
-        guard enabled else { health = "Desktop connection disabled"; return }
         refreshingDiscovery = true; defer { refreshingDiscovery = false }
         let signature = ["state_5.sqlite", "state_5.sqlite-wal"].map { name in
             let attrs = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)
@@ -258,7 +245,7 @@ import ClaudeDesktopAdapter
         if catalog.retryNeeded || signature != metadataSignature || now - lastDiscovery >= 60 || lastDiscovery == 0 {
             let directory = directory
             let result = await Task.detached(priority: .utility) { Result { try ThreadDiscovery.candidates(directory: directory) } }.value
-            guard enabled, !sleeping else { return }
+            guard !sleeping else { return }
             let previousDiagnostic = catalog.diagnostic
             catalog.update(result)
             if let diagnostic = catalog.diagnostic, diagnostic != previousDiagnostic {
@@ -276,7 +263,7 @@ import ClaudeDesktopAdapter
             // A parser/connection failure must not evict an active session.
             // Explicit no-owner results may release ordinary stale priority.
             let pending = (await core.snapshot()).filter(\.needsAttention).map { $0.id.scope.conversation }
-            guard enabled, !sleeping else { return }
+            guard !sleeping else { return }
             let explicit = extraThreads.split(whereSeparator: \.isWhitespace).map(String.init).filter { $0.utf8.count <= 256 }
             let candidateIDs = candidates.map(\.id)
             let baseline = Set(pending + explicit + candidateIDs).union(observedCodexConversations)

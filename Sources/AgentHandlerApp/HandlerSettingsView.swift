@@ -19,12 +19,6 @@ struct HandlerSettingsView: View {
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Tracking").font(.headline)
-                    Toggle("Connect to Desktop", isOn: $model.enabled).disabled(model.demo)
-                    Text("Questions and supported approvals from recent local Work conversations.").font(.caption).foregroundStyle(.secondary)
-                }
-                Divider()
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Open automatically").font(.headline)
                     Toggle("Blocking questions or approvals", isOn: $model.autoOpenSettings.blocking).disabled(model.demo)
@@ -38,7 +32,7 @@ struct HandlerSettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Startup").font(.headline)
                     Toggle("Launch at login", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) })).disabled(model.demo)
-                    Text("Escape or click outside to close. Drafts stay until their request ends. Control-click the agent for commands.").font(.caption).foregroundStyle(.secondary)
+                    Text("Tracking runs automatically while Agent Handler is open. Escape or click outside hides the panel and keeps your drafts. The header’s × quits the app. Control-click the agent for commands.").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("The notch number shows running agents. The menu-bar number also includes requests and recent finishes. Finished rows disappear after five minutes, or you can hide them with ×. New activity brings them back.").font(.caption).foregroundStyle(.secondary)
                 Divider()

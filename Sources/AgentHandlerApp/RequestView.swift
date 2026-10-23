@@ -33,7 +33,7 @@ struct HandlerPanelView: View {
                             PanelIconButton(title: "Dismiss message", symbol: "xmark") { model.issue = nil }
                         }.padding(12).background(.orange.opacity(0.10)).panelMeasuredHeight(.issue)
                 }
-                if let warning = model.trackingWarning, model.enabled {
+                if let warning = model.trackingWarning {
                     Label(warning, systemImage: "exclamationmark.triangle")
                         .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true).padding(12).frame(maxWidth: .infinity, alignment: .leading).panelMeasuredHeight(.warning)
                 }
@@ -141,12 +141,13 @@ struct HandlerPanelView: View {
                         .padding(.horizontal, 7).padding(.vertical, 3).background(.orange.opacity(0.16), in: Capsule())
                         .foregroundStyle(.orange).help("Requests needing attention; the menu-bar number also includes working and recently finished sessions.").accessibilityLabel("\(model.requests.count) \(model.requests.count == 1 ? "request needs" : "requests need") attention")
                 }
+                PanelIconButton(title: presentation.style == .notch ? "Collapse notch (Escape)" : "Close panel (Escape)",
+                    symbol: "chevron.up", action: collapse)
+                    .keyboardShortcut(.cancelAction)
                 PanelIconButton(title: model.showSettings ? (model.showSessions ? "Back to sessions" : "Back to question") : "Settings", symbol: model.showSettings ? "arrow.left" : "gearshape") {
                     model.showSettings.toggle()
                 }.keyboardShortcut(",", modifiers: .command)
-                PanelIconButton(title: presentation.style == .notch ? "Collapse notch (Escape)" : "Close panel (Escape)",
-                    symbol: presentation.style == .notch ? "chevron.up" : "xmark", action: collapse)
-                    .keyboardShortcut(.cancelAction)
+                PanelIconButton(title: "Quit Agent Handler", symbol: "xmark") { NSApp.terminate(nil) }
             }
         }.padding(.horizontal, expanded ? 16 : 12)
             .frame(height: presentation.style == .notch ? 40 : expanded ? 46 : 30)
@@ -191,10 +192,10 @@ struct HandlerPanelView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            Image(systemName: !model.enabled ? "pause.circle" : model.connectedConversations == 0 && !model.demo ? "desktopcomputer" : "tray")
+            Image(systemName: model.connectedConversations == 0 && !model.demo ? "desktopcomputer" : "tray")
                 .font(.system(size: 25, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
-            Text(!model.enabled ? "Tracking is paused" : model.needsSourceApproval ? "Check Codex for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Codex" : "No sessions to show").font(.headline)
-            Text(!model.enabled ? "Turn on Connect to Desktop in Settings to resume." : model.connectedConversations == 0 && !model.demo ? "Keep Codex open. Sessions appear automatically once connected." : "New activity will appear automatically.")
+            Text(model.needsSourceApproval ? "Check Codex for approvals" : model.connectedConversations == 0 && !model.demo ? "Waiting for Codex" : "No sessions to show").font(.headline)
+            Text(model.connectedConversations == 0 && !model.demo ? "Keep Codex open. Sessions appear automatically once connected." : "New activity will appear automatically.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }.padding(20).frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
     }

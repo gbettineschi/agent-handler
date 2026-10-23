@@ -179,6 +179,26 @@ import SwiftUI
             }
         }
         try check(panel.effectiveStyle == .notch && !panel.isExpanded && window.frame == geometry.collapsedFrame, "initial collapsed placement")
+        // Dispatch only within this fixture process. A missed view-entry event
+        // must not prevent geometric hover, including over the camera region.
+        func move(to point: CGPoint) throws {
+            pointer = point
+            guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else { throw Failure.render }
+            NSApp.sendEvent(event)
+        }
+        for x in [geometry.collapsedFrame.minX + 1, geometry.notch.midX, geometry.collapsedFrame.maxX - 1] {
+            // Repeated movement must not keep restarting the opening dwell.
+            for offset in 0..<8 {
+                try move(to: CGPoint(x: x, y: geometry.collapsedFrame.maxY - 1 - CGFloat(offset % 2)))
+                try await Task.sleep(for: .milliseconds(35))
+            }
+            try check(panel.isExpanded && !window.isKeyWindow, "mouse movement recovers missed entry at x=\(x)")
+            try move(to: CGPoint(x: screen.minX + 10, y: screen.minY + 10))
+            try await Task.sleep(for: .milliseconds(600))
+            try check(!panel.isExpanded, "mouse movement exit folds")
+        }
         pointer = CGPoint(x: geometry.collapsedFrame.minX + 24, y: geometry.collapsedFrame.midY)
         panel.pointerChanged()
         try await Task.sleep(for: .milliseconds(450))
@@ -196,6 +216,13 @@ import SwiftUI
         pointer = CGPoint(x: screen.minX + 10, y: screen.minY + 10); panel.pointerChanged()
         try await Task.sleep(for: .milliseconds(450))
         try check(panel.isExpanded, "explicit pin survives leave")
+        pointer = CGPoint(x: geometry.notch.midX, y: geometry.collapsedFrame.minY - 20)
+        panel.pointerChanged() // Cache inside the expanded body, outside the compact trigger.
+        window.performClose(nil)
+        try move(to: CGPoint(x: geometry.collapsedFrame.minX + 24, y: geometry.collapsedFrame.midY))
+        try await Task.sleep(for: .milliseconds(450))
+        try check(panel.isExpanded, "first compact movement after body collapse starts dwell")
+        panel.show()
         pointer = CGPoint(x: geometry.notch.midX, y: geometry.collapsedFrame.minY - 2)
         window.performClose(nil); panel.pointerChanged()
         try await Task.sleep(for: .milliseconds(450))
@@ -231,7 +258,7 @@ import SwiftUI
         try check(panel.effectiveStyle == .notch && panel.isExpanded && model.showSettings, "display recovery")
         model.companionStyle = .menuBar; panel.refresh()
         try check(panel.effectiveStyle == .menuBar && panel.isExpanded, "menu-bar return")
-        print("notch lifecycle: dwell opens without focus; leave folds and re-entry opens; explicit collapse suppresses reopen; uncertain/automatic waits stay; resolution folds; Settings and display fallback preserve route")
+        print("notch lifecycle: mouse-movement dispatch recovers missed entry at left/camera/right without focus or dwell starvation; leave folds and re-entry opens; explicit collapse suppresses reopen; uncertain/automatic waits stay; resolution folds; Settings and display fallback preserve route")
     }
     /// Observe the real scroll viewport during expansion, not just its settled
     /// size. A short list must fit throughout the reveal, without a scroller.
