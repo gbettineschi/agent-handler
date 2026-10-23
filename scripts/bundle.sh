@@ -3,13 +3,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export CLANG_MODULE_CACHE_PATH="$PWD/.build/ModuleCache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
-swift build --disable-sandbox --cache-path "$PWD/.build/cache" --config-path "$PWD/.build/config" --security-path "$PWD/.build/security" -c release --product AgentHandlerApp
+version="${APP_VERSION:-0.1.0}"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  printf '%s\n' 'APP_VERSION must look like 0.1.0.' >&2
+  exit 1
+fi
+build_args=(--disable-sandbox --cache-path "$PWD/.build/cache" --config-path "$PWD/.build/config" --security-path "$PWD/.build/security" -c release --product AgentHandlerApp)
+if [[ "${APP_UNIVERSAL:-0}" == 1 ]]; then build_args+=(--arch arm64 --arch x86_64); fi
+swift build "${build_args[@]}"
+binary_dir="$(swift build "${build_args[@]}" --show-bin-path)"
 app="$PWD/dist/Agent Handler.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp .build/release/AgentHandlerApp "$app/Contents/MacOS/AgentHandler"
+cp "$binary_dir/AgentHandlerApp" "$app/Contents/MacOS/AgentHandler"
+cp assets/AppIcon.icns "$app/Contents/Resources/"
 cp THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
 cp -R LICENSES "$app/Contents/Resources/"
-cat > "$app/Contents/Info.plist" <<'PLIST'
+cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -17,8 +26,9 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>Agent Handler</string>
 <key>CFBundleIdentifier</key><string>dev.gbettineschi.agent-handler</string>
 <key>CFBundleExecutable</key><string>AgentHandler</string>
+<key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundleShortVersionString</key><string>$version</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
@@ -27,4 +37,5 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 codesign --force --sign - "$app"
+touch "$app"
 printf '%s\n' "$app"

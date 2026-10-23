@@ -6,4 +6,4 @@ Origin files: `JSONValue.swift`, `RecordCoding.swift`, `CodexDesktopIPC.swift`, 
 
 Changes include module/type names, a different request controller and delivery ledger, stricter shape and capacity validation, item/turn state projection and discarded-branch patch handling, completed-turn question tracking and native inherited-settings reply submission, socket peer checking, connection and recovery limits, and product-specific response handling. Approval adaptations add independent reconciliation scopes, complete permission-setting checks, exact command-rule choices, restricted browser/app confirmation schemas, whole-request fingerprints and conservative handling of native dispatch acknowledgments. No upstream quota, account or agent-launching modules are included.
 
-The remaining original Agent Handler code is private project code. This notice does not grant a license to that original code. Third-party portions retain their own license.
+This notice does not grant a license to the remaining original Agent Handler code. Third-party portions retain their own license.
