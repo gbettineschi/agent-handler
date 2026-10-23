@@ -34,7 +34,6 @@ struct HandlerSettingsView: View {
                     Toggle("Launch at login", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) })).disabled(model.demo)
                     Text("Tracking runs automatically while Agent Handler is open. Escape or click outside hides the panel and keeps your drafts. The header’s × quits the app. Control-click the agent for commands.").font(.caption).foregroundStyle(.secondary)
                 }
-                Text("The notch number shows running agents. The menu-bar number also includes requests and recent finishes. Finished rows disappear after five minutes, or you can hide them with ×. New activity brings them back.").font(.caption).foregroundStyle(.secondary)
                 Divider()
                 DisclosureGroup("Connection details") {
                     VStack(alignment: .leading, spacing: 10) {
