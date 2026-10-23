@@ -21,7 +21,7 @@
 - [x] Add source installation and ZIP packaging; add a manual/tag universal-build workflow.
 - [x] Replace the long README with brief features, installation, caveats and development links.
 - [x] Check native and universal bundles, extracted ZIP signatures, installer copy and running-app refusal. Review the final diff.
-- [ ] Push the working branch and fast-forward the default branch only if it has no independent commits; run the manual packaging workflow without publishing a release.
+- [x] Push the working branch and fast-forward the default branch only if it has no independent commits; run the manual packaging workflow without publishing a release.
 
 ## Review focus
 
