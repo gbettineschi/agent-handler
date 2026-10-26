@@ -2,11 +2,11 @@
 
 # Agent Handler
 
-A small macOS app that keeps an eye on your agents while you do something else
+A small macOS app that keeps an eye on your agents while you do something else.
 
-See which Codex sessions are running, answer questions and handle supported approvals from the menu bar or notch. The panel can open when something needs you, then get out of the way. 
+See which Codex sessions are running, answer questions and handle supported approvals from the menu bar or notch. The panel can open when something needs you, then get out of the way.
 
-**The app is fully vibe-coded and built for my own use.** I built it when a Codex update in autumn 2026 made unreliable all the existing similar apps. The app and repository are provided as is, without warranty or promised support.
+**100% vibe-coded, built for personal use, and provided as is.** I built it when a Codex update broke the similar apps I was using. No warranty or promised support.
 
 <img src="docs/images/ui/notch-sessions.png" width="520" alt="Agent Handler notch panel showing example sessions">
 
@@ -14,11 +14,32 @@ See which Codex sessions are running, answer questions and handle supported appr
 
 Requires **macOS 14 or later**.
 
-Download `AgentHandler.zip` from [Releases](https://github.com/gbettineschi/agent-handler/releases), when available. Unzip it, move **Agent Handler.app** to Applications, and open it. Release builds support Apple silicon and Intel.
+### Homebrew
+
+Moving from an existing copy? Turn off **Launch at login** in that copy and quit it first. The source installer uses `~/Applications` by default; remove that old app bundle before switching to Homebrew so you keep one copy. Preferences and app data can stay.
+
+```sh
+brew tap gbettineschi/tetherbug https://github.com/gbettineschi/Tetherbug
+brew install --cask gbettineschi/tetherbug/agent-handler
+open "/Applications/Agent Handler.app"
+```
+
+This uses my personal tap, shared with Tetherbug. Re-enable **Launch at login** in the new copy if wanted. To update, quit Agent Handler and run:
+
+```sh
+brew update
+brew upgrade --cask gbettineschi/tetherbug/agent-handler
+```
+
+### Direct download
+
+Download [`AgentHandler.zip`](https://github.com/gbettineschi/agent-handler/releases/latest/download/AgentHandler.zip), unzip it, move **Agent Handler.app** to Applications, and open it. The download supports Apple silicon and Intel. To update, quit the app and replace it in the same location.
 
 The app is ad-hoc signed, not notarized. macOS may block downloaded builds; see [Apple’s instructions](https://support.apple.com/102445) if you choose to open one.
 
-Or build locally with a **matching Swift 6 toolchain and macOS SDK**:
+### Build from source
+
+Requires a **matching Swift 6 toolchain and macOS SDK**:
 
 ```sh
 git clone https://github.com/gbettineschi/agent-handler.git
@@ -37,6 +58,6 @@ This installs into `~/Applications`. Quit Agent Handler before updating it. To u
 
 ## Development
 
-`scripts/test.sh` runs the tests. `scripts/bundle.sh` builds the app; `scripts/package.sh` creates an installable ZIP and checksum. The **Package macOS app** GitHub workflow builds a universal download manually; pushing a `v0.1.0`-style tag also publishes a release.
+`scripts/test.sh` runs the tests. `scripts/bundle.sh` builds the app; `scripts/package.sh` creates a ZIP, checksum and matching Homebrew cask. The **Package macOS app** workflow builds both Mac architectures; a version tag publishes the release. See [release instructions](docs/releasing.md) for keeping the tap up to date.
 
 [Coverage and remaining checks](docs/verification.md) · [Architecture](docs/superpowers/specs/2026-10-19-agent-handler-design.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
