@@ -19,8 +19,8 @@ Requires **macOS 14 or later**.
 Moving from an existing copy? Turn off **Launch at login** in that copy and quit it first. The source installer uses `~/Applications` by default; remove that old app bundle before switching to Homebrew so you keep one copy. Preferences and app data can stay.
 
 ```sh
-brew tap gbettineschi/tetherbug https://github.com/gbettineschi/Tetherbug
-brew install --cask gbettineschi/tetherbug/agent-handler
+brew tap gbettineschi/tap
+brew install --cask gbettineschi/tap/agent-handler
 open "/Applications/Agent Handler.app"
 ```
 
@@ -28,7 +28,7 @@ This uses my personal tap, shared with Tetherbug. Re-enable **Launch at login** 
 
 ```sh
 brew update
-brew upgrade --cask gbettineschi/tetherbug/agent-handler
+brew upgrade --cask gbettineschi/tap/agent-handler
 ```
 
 ### Direct download

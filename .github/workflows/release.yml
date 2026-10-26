@@ -5,6 +5,9 @@ on:
     tags: ['v*']
 permissions:
   contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   package:
     runs-on: macos-15
@@ -41,3 +44,14 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/AgentHandler.zip dist/SHA256SUMS dist/agent-handler.rb \
             --verify-tag --title "Agent Handler ${GITHUB_REF_NAME#v}" \
             --notes '100% vibe-coded for personal use. Provided as is. macOS 14+, Apple silicon and Intel. This build is ad-hoc signed and not notarized.'
+  tap:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+    uses: gbettineschi/homebrew-tap/.github/workflows/publish.yml@main
+    with:
+      package: agent-handler
+      tag: ${{ github.ref_name }}
+    secrets:
+      TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
