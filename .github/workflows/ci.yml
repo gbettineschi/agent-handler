@@ -15,9 +15,10 @@ jobs:
       - name: Offscreen UI matrix
         run: bash scripts/render-ui.sh
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: synthetic-ui-renders
+          retention-days: 1
           path: .build/ui-snapshots/*.png
           if-no-files-found: ignore
       - name: Development bundle

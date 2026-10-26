@@ -19,4 +19,4 @@ APP_VERSION=0.1.0 APP_UNIVERSAL=1 bash scripts/package.sh
 (cd dist && shasum -a 256 -c SHA256SUMS)
 ```
 
-Running the workflow manually uploads build artifacts without publishing a release. Use a new version tag for each public release; keep previous tags and downloads intact. Homebrew updates are manual (`brew update`, then `brew upgrade --cask gbettineschi/tap/agent-handler`); the app has no built-in updater.
+Running the workflow manually builds and verifies the packages without uploading installers or publishing a release. Routine CI keeps tests and builds, saving UI diagnostics only on failure for one day. Tagged releases upload installers directly to GitHub Releases; no duplicate Actions installer artifact is kept. Use a new version tag for each public release; keep previous tags and downloads intact. Homebrew updates are manual (`brew update`, then `brew upgrade --cask gbettineschi/tap/agent-handler`); the app has no built-in updater.

@@ -27,16 +27,8 @@ jobs:
           for arch in arm64 x86_64; do
             lipo 'dist/Agent Handler.app/Contents/MacOS/AgentHandler' -verify_arch "$arch"
           done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AgentHandler-macOS
-          path: |
-            dist/AgentHandler.zip
-            dist/SHA256SUMS
-            dist/agent-handler.rb
-          if-no-files-found: error
       - name: Publish tagged release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -46,7 +38,7 @@ jobs:
             --notes '100% vibe-coded for personal use. Provided as is. macOS 14+, Apple silicon and Intel. This build is ad-hoc signed and not notarized.'
   tap:
     needs: package
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
     uses: gbettineschi/homebrew-tap/.github/workflows/publish.yml@main
